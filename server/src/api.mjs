@@ -60,6 +60,22 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
     return { errors, captured };
   }
 
+  /** A message a volunteer can act on, for the most important problem. */
+  function explain(errors, body, settings) {
+    const ce = errors.captured_at;
+    if (ce?.startsWith('is older')) {
+      const maxAge = parseInt(settings.max_age_minutes, 10) || 1440;
+      const taken = new Date(Date.parse(body.captured_at)).toLocaleString('en-US', {
+        timeZone: settings.timezone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+      });
+      const limit = maxAge % 60 === 0 ? `${maxAge / 60} hours` : `${maxAge} minutes`;
+      return `This photo was taken ${taken}, more than ${limit} ago. Please take a new photo of the board.`;
+    }
+    if (ce === 'is in the future') return 'The photo’s time is in the future. Check the date and time on your phone.';
+    const fields = Object.entries(errors).map(([k, v]) => `${k} ${v}`).join('; ');
+    return `Some values were not accepted (${fields}).`;
+  }
+
   function savePhoto(base64) {
     const bytes = Buffer.from(String(base64), 'base64');
     if (bytes.length < 4 || bytes.length > 8 * 1024 * 1024 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
@@ -145,7 +161,10 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
       const settings = store.settings();
       const body = await readJson(req, 15 * 1024 * 1024);
       const { errors, captured } = validateSubmission(body, settings);
-      if (Object.keys(errors).length) return fail(res, 422, 'invalid', 'Some values were not accepted.', { fields: errors });
+      if (Object.keys(errors).length) {
+        log(`rejected an update from ${user.username}: ${JSON.stringify(errors)}`);
+        return fail(res, 422, 'invalid', explain(errors, body, settings), { fields: errors });
+      }
       const current = store.current();
       if (current?.captured_at_ms != null && current.captured_at_ms >= captured) {
         return fail(res, 409, 'stale', `Times from a newer photo (taken ${current.captured_at}) are already saved.`);
