@@ -83,3 +83,7 @@ examples are how support for new boards gets built.
 - The photo is uploaded only if your masjid's server asks for it, so the
   masjid can check updates. The times are always sent with the time the photo
   was taken.
+- If the photo recorded **where it was taken** (most phone cameras do, when
+  location is on), that location is sent too. The masjid uses it to check
+  that the photo was taken at the masjid. The app doesn't use your phone's
+  location in any other way.

@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { publishedTimes, sunsetMaghrib } from './times.mjs';
+import { reviewNotes } from './review.mjs';
 import { localDate } from './sun.mjs';
 import { DEFAULT_SETTINGS } from './db.mjs';
 import {
@@ -71,6 +72,7 @@ input[type=checkbox], input[type=radio] { width: 20px; height: 20px; accent-colo
 pre { background: var(--bg); padding: 14px; border-radius: 12px; overflow-x: auto; font-size: 14px; color: var(--text); white-space: pre-wrap; word-break: break-all; }
 img.photo { max-width: 100%; border-radius: 14px; }
 .login { max-width: 380px; margin: 10vh auto; }
+.notes { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; font-size: 14px; }
 @media (max-width: 640px) {
   main { padding: 16px; }
   table.users, table.users tbody, table.users tr, table.users td { display: block; }
@@ -123,6 +125,14 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
   const origin = (req) =>
     `${req.headers['x-forwarded-proto'] ?? (secureCookies ? 'https' : 'http')}://${req.headers.host}`;
 
+  /** Review flags (amber) and notes (muted) for an update. */
+  const notesHtml = (notes, compact = false) => {
+    const shown = compact ? notes.filter((n) => n.level !== 'note') : notes;
+    if (!shown.length) return '';
+    return `<div class="notes">${shown.map((n) => `<div class="${n.level === 'flag' ? 'warn' : n.level === 'ok' ? 'ok' : 'muted'}">${
+      n.level === 'flag' ? '⚑ ' : ''}${e(n.text)}</div>`).join('')}</div>`;
+  };
+
   const csrfField = (s) => `<input type="hidden" name="_csrf" value="${e(s.csrf)}">`;
 
   function overview(s, notice, req, recent = [], statuses = new Map()) {
@@ -164,7 +174,8 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
         ${last ? `<p class="muted">Last updated by <b>${e(last.user_name ?? 'unknown')}</b> from a photo taken
             ${e(when(last.captured_at, tz))} (${e(last.captured_at_source ?? '?')})${last.display_clock
               ? `; the board clock showed ${to12h(last.display_clock)}` : ''}.
-            ${last.photo_file ? `<a href="/admin/photos/${e(last.photo_file)}">See the photo</a>.` : ''}</p>`
+            ${last.photo_file ? `<a href="/admin/photos/${e(last.photo_file)}">See the photo</a>.` : ''}</p>
+          ${notesHtml(reviewNotes(last, settings))}`
           : '<p class="muted">No updates yet. Approve a volunteer below, then send times from the app.</p>'}
       </section>
       <section class="card">
@@ -247,6 +258,14 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
             Ask the app to upload each photo, so you can check updates</label>
           <label>Reject photos older than (minutes) ${err('max_age_minutes')}
             <input type="number" name="max_age_minutes" min="10" max="10080" value="${e(st.max_age_minutes)}"></label>
+          <div class="grid2">
+            <label>Flag photos taken farther than (metres) ${err('flag_distance_m')}
+              <input type="number" name="flag_distance_m" min="50" max="100000" value="${e(st.flag_distance_m)}">
+              <span class="hint">From the masjid’s location above, using the photo’s own GPS data.</span></label>
+            <label>Flag when the board’s clock is off by more than (minutes) ${err('flag_clock_minutes')}
+              <input type="number" name="flag_clock_minutes" min="1" max="180" value="${e(st.flag_clock_minutes)}">
+              <span class="hint">Compared with when the photo was taken.</span></label>
+          </div>
         </section>
 
         <section class="card stack">
@@ -310,6 +329,12 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
     const age = parseInt(form.max_age_minutes, 10);
     if (!(age >= 10 && age <= 10080)) errors.max_age_minutes = 'Between 10 and 10080';
     else v.max_age_minutes = String(age);
+    for (const [k, lo, hi] of [['flag_distance_m', 50, 100000], ['flag_clock_minutes', 1, 180]]) {
+      const n = parseInt(form[k], 10);
+      if (form[k] === undefined) continue;
+      if (!(n >= lo && n <= hi)) errors[k] = `Between ${lo} and ${hi}`;
+      else v[k] = String(n);
+    }
     v.widget_theme = form.widget_theme === 'light' ? 'light' : 'dark';
     if (!/^#[0-9a-f]{6}$/i.test(form.widget_accent ?? '')) errors.widget_accent = 'A colour like #D4AF5F';
     else v.widget_accent = form.widget_accent;
@@ -330,17 +355,19 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
   }
 
   function historyPage(s) {
-    const tz = store.settings().timezone;
+    const settings = store.settings();
+    const tz = settings.timezone;
     const rows = store.submissions(100).map((x) => `<tr>
       <td>${e(when(x.received_at, tz))}</td>
       <td>${e(x.user_name ?? '—')}</td>
       <td>${e(when(x.captured_at, tz))}<br><span class="muted">${e(x.captured_at_source ?? '')}${x.display_clock ? ` · board clock ${to12h(x.display_clock)}` : ''}</span></td>
       <td>${Object.entries(NAMES).filter(([k]) => x.iqamah[k]).map(([k, n]) => `${n} ${to12h(x.iqamah[k])}`).join('<br>')}</td>
-      <td>${x.recognition?.edited?.length ? `<span class="warn">Corrected: ${e(x.recognition.edited.join(', '))}</span>` : '<span class="muted">As read</span>'}</td>
+      <td>${x.recognition?.edited?.length ? `<span class="warn">Corrected: ${e(x.recognition.edited.join(', '))}</span>` : '<span class="muted">As read</span>'}
+        ${notesHtml(reviewNotes(x, settings), true)}</td>
       <td>${x.photo_file ? `<a href="/admin/photos/${e(x.photo_file)}">Photo</a>` : '<span class="muted">—</span>'}</td>
     </tr>`).join('');
     return page('History', `<h1>History</h1><section class="card"><div class="table-wrap">
-      ${rows ? `<table><tr><th>Received</th><th>By</th><th>Photo taken</th><th>Iqamah</th><th>Reading</th><th></th></tr>${rows}</table>`
+      ${rows ? `<table><tr><th>Received</th><th>By</th><th>Photo taken</th><th>Iqamah</th><th>Checks</th><th></th></tr>${rows}</table>`
         : '<p class="muted">No updates yet.</p>'}</div></section>`, { session: s, active: '/admin/history' });
   }
 

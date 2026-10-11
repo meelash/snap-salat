@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:snap_salat_api/snap_salat_api.dart';
 
 import '../main.dart';
@@ -81,6 +82,8 @@ class _SignInScreenState extends State<SignInScreen> {
           final volunteer = await api.check(token);
           await state.saveSession(Session(token, userName: volunteer.name));
       }
+      // Lets the password manager offer to save the new login.
+      TextInput.finishAutofillContext();
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       setState(() {
@@ -180,6 +183,9 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
               const SizedBox(height: 20),
             ],
+            // Password managers (e.g. Bitwarden) only offer to fill or
+            // generate when they see the standard username/password hints;
+            // the "new…" hints alone aren't enough on Android.
             if (info != null && _mode == _Mode.register) ...[
               const Text(
                 'New volunteers ask for an account here. Someone at the '
@@ -192,12 +198,19 @@ class _SignInScreenState extends State<SignInScreen> {
                   helper: 'So the masjid knows who you are',
                   autofill: const [AutofillHints.name]),
               _field(_user, 'Choose a username',
-                  key: 'username', autofill: const [AutofillHints.newUsername]),
+                  key: 'username',
+                  autofill: const [
+                    AutofillHints.username,
+                    AutofillHints.newUsername
+                  ]),
               _field(_password, 'Choose a password',
                   key: 'password',
                   helper: 'At least 8 characters',
                   obscure: true,
-                  autofill: const [AutofillHints.newPassword]),
+                  autofill: const [
+                    AutofillHints.password,
+                    AutofillHints.newPassword
+                  ]),
               _field(_contact, 'Phone or email (optional)',
                   keyboard: TextInputType.emailAddress),
               _field(_note, 'Note for the masjid (optional)',

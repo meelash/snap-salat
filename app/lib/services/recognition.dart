@@ -62,7 +62,12 @@ class RecognitionResult {
   final CaptureInfo capture;
   final String imageSha256;
 
-  const RecognitionResult(this.reading, this.capture, this.imageSha256);
+  /// Where the photo was taken, if it recorded GPS. Sent so the masjid can
+  /// flag photos taken somewhere else; never shown or edited in the app.
+  final PhotoLocation? location;
+
+  const RecognitionResult(this.reading, this.capture, this.imageSha256,
+      {this.location});
 }
 
 /// Works out the capture time: EXIF if the camera recorded it, otherwise
@@ -85,6 +90,7 @@ Future<RecognitionResult> recognise(PhotoInput photo,
     {DisplayHints? hints, ReaderChoice choice = ReaderChoice.auto}) async {
   final capture = captureInfoFor(photo);
   final sha = sha256.convert(photo.bytes).toString();
+  final location = PhotoLocation.fromExif(photo.bytes);
 
   var effective = choice;
   if (choice == ReaderChoice.auto) {
@@ -102,14 +108,14 @@ Future<RecognitionResult> recognise(PhotoInput photo,
         _AnalogJob(
             photo.bytes, hints?.toJson(), capture.local.toIso8601String()));
     if (effective == ReaderChoice.analog || _labelled(a) >= 4) {
-      return RecognitionResult(a, capture, sha);
+      return RecognitionResult(a, capture, sha, location: location);
     }
     analog = a;
   }
   final text = await _readText(photo);
   final best =
       analog == null || _labelled(text) > _labelled(analog) ? text : analog;
-  return RecognitionResult(best, capture, sha);
+  return RecognitionResult(best, capture, sha, location: location);
 }
 
 int _labelled(BoardReading r) => r.times.where((t) => t.prayer != null).length;

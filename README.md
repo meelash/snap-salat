@@ -149,3 +149,8 @@ states the true times, as in `test/analog_sample_test.dart`.
 The directory URL, help links and package id are in
 [`app/lib/config.dart`](app/lib/config.dart) and the Android/iOS project
 files (`org.snapsalat.snap_salat`).
+
+## License
+
+[MIT](LICENSE). The bundled Figtree and Reem Kufi fonts are under the SIL
+Open Font License (see `app/assets/fonts/`).

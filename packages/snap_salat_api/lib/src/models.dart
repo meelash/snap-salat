@@ -157,6 +157,10 @@ class PrayerTimesSubmission {
   final Map<String, Object?> recognition;
   final Map<String, Object?> client;
 
+  /// Where the photo was taken, from its own GPS data, if it has any:
+  /// `{"lat": …, "lng": …}`. Lets the masjid flag photos taken elsewhere.
+  final Map<String, double>? location;
+
   /// SHA-256 of the photo (hex), always sent so servers can deduplicate.
   final String? imageSha256;
 
@@ -172,6 +176,7 @@ class PrayerTimesSubmission {
     this.displayClock,
     this.recognition = const {},
     this.client = const {},
+    this.location,
     this.imageSha256,
     this.imageJpegBase64,
   });
@@ -188,6 +193,7 @@ class PrayerTimesSubmission {
         if (displayClock != null) 'display_clock': displayClock,
         if (recognition.isNotEmpty) 'recognition': recognition,
         if (client.isNotEmpty) 'client': client,
+        if (location != null) 'location': {...location!, 'source': 'exif'},
         if (imageSha256 != null || imageJpegBase64 != null)
           'image': {
             if (imageSha256 != null) 'sha256': imageSha256,

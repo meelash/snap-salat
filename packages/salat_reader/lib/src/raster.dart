@@ -142,3 +142,39 @@ class CaptureTime {
     return CaptureTime(local, offset);
   }
 }
+
+/// Where the photo was taken, from its EXIF GPS tags, if the camera
+/// recorded them. Lets the masjid flag photos taken somewhere else.
+class PhotoLocation {
+  final double latitude, longitude;
+
+  const PhotoLocation(this.latitude, this.longitude);
+
+  Map<String, Object> toJson() => {'lat': latitude, 'lng': longitude};
+
+  static PhotoLocation? fromExif(Uint8List jpeg) {
+    final exif = img.decodeJpgExif(jpeg);
+    if (exif == null) return null;
+    final gps = exif.gpsIfd;
+    double? coordinate(String tag, String refTag, String negative) {
+      final v = gps[tag];
+      if (v == null || v.length < 3) return null;
+      double part(int i) {
+        final r = v.toRational(i);
+        return r.denominator == 0 ? 0 : r.numerator / r.denominator;
+      }
+
+      final degrees = part(0) + part(1) / 60 + part(2) / 3600;
+      final ref = gps[refTag]?.toString().replaceAll('\x00', '').trim();
+      return ref == negative ? -degrees : degrees;
+    }
+
+    final lat = coordinate('GPSLatitude', 'GPSLatitudeRef', 'S');
+    final lng = coordinate('GPSLongitude', 'GPSLongitudeRef', 'W');
+    if (lat == null || lng == null) return null;
+    // 0,0 is what some cameras write when they have no fix.
+    if (lat == 0 && lng == 0) return null;
+    if (lat.abs() > 90 || lng.abs() > 180) return null;
+    return PhotoLocation(lat, lng);
+  }
+}

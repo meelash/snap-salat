@@ -48,7 +48,9 @@ CREATE TABLE IF NOT EXISTS submissions (
   recognition TEXT,
   client TEXT,
   image_sha256 TEXT,
-  photo_file TEXT
+  photo_file TEXT,
+  photo_lat REAL,
+  photo_lng REAL
 );
 CREATE TABLE IF NOT EXISTS announcements (
   id INTEGER PRIMARY KEY,
@@ -98,13 +100,26 @@ export const DEFAULT_SETTINGS = {
   announce_url: '', // e.g. http://localhost:3000
   announce_token: '', // bearer token; never shown back on the admin page
   announce_submit: '1', // '1': submit for approval; '0': leave as a draft
+  // Review flags on updates.
+  flag_distance_m: '500', // photo taken farther than this from the masjid
+  flag_clock_minutes: '15', // board clock disagrees with the photo time by more
 };
+
+/** Columns added after the first release; created on older databases. */
+const MIGRATIONS = [
+  ['submissions', 'photo_lat', 'REAL'],
+  ['submissions', 'photo_lng', 'REAL'],
+];
 
 export function openDb(file) {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  for (const [table, column, type] of MIGRATIONS) {
+    const has = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+    if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
   return new Store(db);
 }
 
@@ -196,12 +211,13 @@ export class Store {
   addSubmission(s) {
     const r = this.db
       .prepare(`INSERT INTO submissions(user_id, user_name, received_at, captured_at, captured_at_ms, captured_at_source,
-        date, iqamah, adhan, display_clock, recognition, client, image_sha256, photo_file)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        date, iqamah, adhan, display_clock, recognition, client, image_sha256, photo_file, photo_lat, photo_lng)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(
         s.userId, s.userName, now(), s.capturedAt, s.capturedAtMs, s.capturedAtSource ?? null, s.date ?? null,
         JSON.stringify(s.iqamah), JSON.stringify(s.adhan), s.displayClock ?? null,
         JSON.stringify(s.recognition ?? null), JSON.stringify(s.client ?? null), s.imageSha256 ?? null, s.photoFile ?? null,
+        s.location?.lat ?? null, s.location?.lng ?? null,
       );
     const id = Number(r.lastInsertRowid);
     const prev = this.current();

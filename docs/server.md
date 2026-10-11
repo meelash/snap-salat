@@ -42,6 +42,15 @@ Every update is kept with:
 Older photos can never overwrite newer times, and photos older than a limit
 you set are refused.
 
+Updates that deserve a second look are **flagged** on the admin page:
+
+- the photo was taken farther than a set distance from the masjid (500 m by
+  default), using the photo's own GPS data;
+- the board's own clock disagrees with the photo's time;
+- the photo's time came only from the file date.
+
+Nothing is rejected for these. They tell you which photos to open.
+
 ### Maghrib from sunset
 
 Many masajid pray Maghrib at sunset, so the Maghrib clock on the board isn't

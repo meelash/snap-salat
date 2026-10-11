@@ -13,7 +13,7 @@ import 'src/raster.dart';
 export 'src/analog/analog_board_reader.dart' show AnalogBoardReader, AnalogLayout;
 export 'src/labeling.dart' show ReadingOrder, to24h;
 export 'src/models.dart';
-export 'src/raster.dart' show CaptureTime, Raster;
+export 'src/raster.dart' show CaptureTime, PhotoLocation, Raster;
 export 'src/text/text_board_parser.dart';
 
 /// Decodes [imageBytes] and reads it as an analog clock board.

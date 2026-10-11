@@ -48,6 +48,12 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
         else if (!HHMM.test(t)) errors[`${name}.${k}`] = 'must be HH:MM (24-hour)';
       }
     }
+    if (body.location !== undefined) {
+      const { lat, lng } = body.location ?? {};
+      if (!(typeof lat === 'number' && Math.abs(lat) <= 90 && typeof lng === 'number' && Math.abs(lng) <= 180)) {
+        errors.location = 'must be {lat, lng} in degrees';
+      }
+    }
     if (!Object.keys(body.iqamah ?? {}).length && !Object.keys(body.adhan ?? {}).length) {
       errors.times = 'no times given';
     }
@@ -161,6 +167,7 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
         client: body.client,
         imageSha256: photo?.sha ?? body.image?.sha256 ?? null,
         photoFile: photo?.file ?? null,
+        location: body.location ? { lat: body.location.lat, lng: body.location.lng } : null,
       });
       log(`${user.username} updated times from a photo taken ${body.captured_at}`);
       // Draft an announcement if the times changed; in the background, so

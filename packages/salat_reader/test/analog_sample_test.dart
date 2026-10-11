@@ -16,6 +16,15 @@ void main() {
     reading = readAnalogBoard(bytes);
   });
 
+  test('reads where the photo was taken from EXIF GPS', () {
+    final where = PhotoLocation.fromExif(
+        File('../../sample_images/IMG_20261009_165338219.jpg').readAsBytesSync());
+    expect(where, isNotNull);
+    // Hamden, Connecticut.
+    expect(where!.latitude, closeTo(41.343, 0.001));
+    expect(where.longitude, closeTo(-72.927, 0.001));
+  });
+
   test('reads the capture time from EXIF', () {
     expect(captured, isNotNull);
     expect(captured!.toIso8601(), '2026-10-09T16:53:38');

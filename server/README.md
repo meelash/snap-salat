@@ -13,6 +13,10 @@ A complete, small server for one masjid. It has no npm dependencies and needs No
   - `/widget.js`, a styled widget you add to your site with one line;
   - `/widget`, the same widget as a page you can put in an iframe.
 
+Each update is checked against the masjid's location (from the photo's GPS
+data) and the board's own clock, and anything suspicious is flagged on the
+admin page for review.
+
 Data lives in one SQLite file (Node's built-in `node:sqlite`) plus a folder of uploaded photos.
 
 ## Try it locally

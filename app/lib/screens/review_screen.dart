@@ -265,6 +265,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
           'platform': Platform.operatingSystem,
         },
         imageSha256: result.imageSha256,
+        location: result.location == null
+            ? null
+            : {
+                'lat': result.location!.latitude,
+                'lng': result.location!.longitude,
+              },
         imageJpegBase64: info?.acceptsImage == true
             ? await photoForUpload(widget.photo.bytes)
             : null,

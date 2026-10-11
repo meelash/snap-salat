@@ -211,6 +211,7 @@ has reviewed and confirmed the times.
     "warnings": []
   },
   "client": { "app": "snap-salat", "version": "1.0.0", "platform": "android" },
+  "location": { "lat": 41.34291, "lng": -72.92657, "source": "exif" },
   "image": { "sha256": "9b1c…" }
 }
 ```
@@ -226,6 +227,7 @@ has reviewed and confirmed the times.
 | `display_clock` | no | What the board's own clock showed, if it has one. If it matches `captured_at`, you can be confident the photo is real and recent. |
 | `recognition` | no | How the times were read: `reader` is `analog-clocks` or `text`, `confidence` runs 0–1, and `edited` lists times the user changed by hand. Useful for auditing. |
 | `client` | no | App name, version and platform. |
+| `location` | no | Where the photo was taken, from the photo's own GPS data (`"source": "exif"`), when it has any. Compare it with the masjid's location to flag photos taken somewhere else. It's never edited by the user, and missing whenever the camera didn't record a location. |
 | `image.sha256` | no | Hex SHA-256 of the original photo. Lets you spot the same photo being sent twice. |
 | `image.jpeg_base64` | no | The photo, shrunk to at most 1600 px, if `accepts.image` is true. |
 
@@ -268,8 +270,12 @@ The example server does all of these:
 4. Every time matches `^([01]\d|2[0-3]):[0-5]\d$` and every key is known.
 5. There is at least one time.
 
-Optionally, compare `display_clock` with `captured_at`. A big difference
-means the board's clock is wrong, or the photo isn't what it claims to be.
+Optionally, flag updates for a person to review. The example server flags:
+
+- a `location` farther than a set distance from the masjid;
+- a `display_clock` that disagrees with `captured_at`, which means the board's
+  clock is wrong or the photo isn't what it claims to be;
+- `captured_at_source: "file"`.
 
 ## `GET /prayer-times` (optional)
 

@@ -102,6 +102,12 @@ test('submissions: merge, stale photos, validation, public JSON', async () => {
   assert.equal(invalid.status, 422);
   const old = await send({ captured_at: minutesAgo(3 * 24 * 60), iqamah: { fajr: '06:00' } });
   assert.equal(old.status, 422);
+  const badPlace = await send({ captured_at: minutesAgo(1), iqamah: { fajr: '06:00' }, location: { lat: 'x' } });
+  assert.equal(badPlace.status, 422);
+  assert.equal((await send({ captured_at: minutesAgo(1), iqamah: { isha: '20:15' }, location: { lat: 41.3429, lng: -72.9266 } })).status, 201);
+  const row = store.submissions(1)[0];
+  assert.equal(row.photo_lat, 41.3429);
+  assert.equal(row.photo_lng, -72.9266);
 
   const pub = await fetch(`${base}/prayer-times.json`);
   assert.equal(pub.headers.get('access-control-allow-origin'), '*');
