@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "masajid": [
+    {
+      "id": "us/connecticut/hamden/islamic-center-of-hamden",
+      "name": "Islamic Center of Hamden",
+      "country": "US",
+      "region": "Connecticut",
+      "city": "Hamden",
+      "api": "https://snapsalat.islamiccenterofhamden.org/snap-salat",
+      "website": "https://islamiccenterofhamden.org",
+      "display": {
+        "type": "analog-clocks",
+        "order": "rtl-rows",
+        "sequence": [
+          "fajr",
+          "dhuhr",
+          "asr",
+          "maghrib",
+          "isha",
+          "jumuah"
+        ],
+        "current_time_clock": true
+      },
+      "maintainers": [
+        "meelash"
+      ]
+    }
+  ]
+}

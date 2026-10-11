@@ -1,0 +1,14 @@
+title: Snap Salat
+description: Keep your masjid's online prayer times right by photographing its prayer-time board.
+baseurl: /snap-salat
+url: https://meelash.github.io
+repository: meelash/snap-salat
+markdown: kramdown
+kramdown:
+  input: GFM
+  auto_ids: true
+defaults:
+  - scope: { path: "" }
+    values: { layout: default }
+include:
+  - openapi.yaml

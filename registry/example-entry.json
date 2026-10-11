@@ -1,0 +1,18 @@
+{
+  "$schema": "../../../../schema/masjid.schema.json",
+  "name": "Example Masjid",
+  "country": "US",
+  "region": "Connecticut",
+  "city": "Hamden",
+  "area": "Whitneyville",
+  "api": "https://example.org/snap-salat",
+  "website": "https://example.org",
+  "location": { "lat": 41.35, "lng": -72.9 },
+  "display": {
+    "type": "analog-clocks",
+    "order": "rtl-rows",
+    "sequence": ["fajr", "dhuhr", "asr", "maghrib", "isha", "jumuah"],
+    "current_time_clock": true
+  },
+  "maintainers": ["your-github-username"]
+}

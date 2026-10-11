@@ -1,0 +1,291 @@
+openapi: 3.1.0
+info:
+  title: Snap Salat API
+  version: "1"
+  description: >
+    Endpoints a masjid website implements so the Snap Salat app can update its
+    prayer times from a photo of the masjid's display. Paths are relative to a
+    base URL chosen by the site, e.g. https://yourmasjid.org/snap-salat.
+    Human-readable guide: docs/api.md.
+servers:
+  - url: https://yourmasjid.org/snap-salat
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, description: Machine-readable code }
+        message: { type: string, description: Shown to the user as-is }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+    User:
+      type: object
+      required: [name, status]
+      properties:
+        name: { type: string }
+        username: { type: string }
+        status: { enum: [pending, approved, revoked] }
+    HHMM:
+      type: string
+      pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+      description: 24-hour local time at the masjid
+    Iqamah:
+      type: object
+      additionalProperties: false
+      properties:
+        fajr: { $ref: '#/components/schemas/HHMM' }
+        dhuhr: { $ref: '#/components/schemas/HHMM' }
+        asr: { $ref: '#/components/schemas/HHMM' }
+        maghrib: { $ref: '#/components/schemas/HHMM' }
+        isha: { $ref: '#/components/schemas/HHMM' }
+        jumuah: { $ref: '#/components/schemas/HHMM' }
+    Adhan:
+      type: object
+      additionalProperties: false
+      properties:
+        fajr: { $ref: '#/components/schemas/HHMM' }
+        sunrise: { $ref: '#/components/schemas/HHMM' }
+        dhuhr: { $ref: '#/components/schemas/HHMM' }
+        asr: { $ref: '#/components/schemas/HHMM' }
+        maghrib: { $ref: '#/components/schemas/HHMM' }
+        isha: { $ref: '#/components/schemas/HHMM' }
+paths:
+  /info:
+    get:
+      summary: Identify the server
+      responses:
+        '200':
+          description: Server description
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api, version, masjid, auth]
+                properties:
+                  api: { const: snap-salat }
+                  version: { const: 1 }
+                  masjid:
+                    type: object
+                    required: [name]
+                    properties:
+                      name: { type: string }
+                      timezone: { type: string, description: IANA zone, e.g. America/New_York }
+                  auth:
+                    type: object
+                    required: [methods]
+                    properties:
+                      methods:
+                        type: array
+                        items: { enum: [password, token] }
+                        contains: { const: password }
+                      register:
+                        type: boolean
+                        default: true
+                        description: false while not taking new sign-ups
+                  accepts:
+                    type: object
+                    properties:
+                      prayers:
+                        type: array
+                        items: { enum: [fajr, dhuhr, asr, maghrib, isha, jumuah] }
+                      adhan: { type: boolean, default: true }
+                      image: { type: boolean, default: false }
+                  max_age_minutes: { type: integer, minimum: 1 }
+  /auth/register:
+    post:
+      summary: A volunteer asks for an account; it starts pending until the masjid approves it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, name]
+              properties:
+                username: { type: string }
+                password: { type: string, minLength: 8 }
+                name: { type: string }
+                contact: { type: string }
+                note: { type: string }
+      responses:
+        '201':
+          description: Registered, awaiting approval
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { const: pending }
+                  message: { type: string }
+        '403':
+          description: Not taking sign-ups (registration_closed)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Username taken
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Invalid fields
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Too many sign-ups
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /auth/login:
+    post:
+      summary: Exchange username and password for a token (works while pending)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token]
+                properties:
+                  access_token: { type: string }
+                  token_type: { const: Bearer }
+                  expires_in: { type: integer, description: Seconds }
+                  user: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Wrong credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Too many attempts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /auth/check:
+    get:
+      summary: Validate a token and report whether the volunteer is approved
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /prayer-times:
+    get:
+      summary: Current times (optional endpoint)
+      responses:
+        '200':
+          description: Current times
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated_at: { type: string, format: date-time }
+                  captured_at: { type: string, format: date-time }
+                  date: { type: string, format: date }
+                  iqamah: { $ref: '#/components/schemas/Iqamah' }
+                  adhan: { $ref: '#/components/schemas/Adhan' }
+        '404':
+          description: Not offered, or no times yet
+    post:
+      summary: Submit times read from a photo
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [captured_at, captured_at_source, submitted_at, date, iqamah]
+              properties:
+                captured_at:
+                  type: string
+                  format: date-time
+                  description: When the photo was taken, with UTC offset
+                captured_at_source:
+                  enum: [exif, camera, file]
+                  description: Not editable by the user. camera is the most trustworthy.
+                submitted_at: { type: string, format: date-time }
+                date: { type: string, format: date, description: Local date the times apply from }
+                iqamah: { $ref: '#/components/schemas/Iqamah' }
+                adhan: { $ref: '#/components/schemas/Adhan' }
+                display_clock: { $ref: '#/components/schemas/HHMM' }
+                recognition:
+                  type: object
+                  properties:
+                    reader: { enum: [analog-clocks, text] }
+                    confidence: { type: number, minimum: 0, maximum: 1 }
+                    edited: { type: array, items: { type: string } }
+                    warnings: { type: array, items: { type: string } }
+                client:
+                  type: object
+                  properties:
+                    app: { type: string }
+                    version: { type: string }
+                    platform: { type: string }
+                image:
+                  type: object
+                  properties:
+                    sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+                    jpeg_base64: { type: string, contentEncoding: base64 }
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { const: accepted }
+                  message: { type: string }
+        '201':
+          description: Accepted
+        '401':
+          description: Sign in again
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Volunteer not approved (error not_approved)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Times from a newer photo are already saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }

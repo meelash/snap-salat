@@ -1,0 +1,40 @@
+name: Display not read well / sample photo
+description: Share a photo of a prayer-time display so the app can learn to read it.
+labels: [display-sample]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you! Real photos are how support for new displays is built.
+        Please only share photos you took, of displays in public areas of the masjid.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of display is it?
+      options:
+        - Analog clocks (one per prayer)
+        - Printed or handwritten board
+        - Digital screen / TV
+        - LCD or LED digits
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: photo
+    attributes:
+      label: Photo(s)
+      description: Drag and drop one or more photos here. Straight-on and with some glare are both useful.
+    validations:
+      required: true
+  - type: textarea
+    id: truth
+    attributes:
+      label: The correct times
+      description: What the display actually shows, so we can test against it (e.g. "Fajr 6:15, Dhuhr 1:30, …").
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else?
+      description: Which times the app got wrong, app version, phone model…

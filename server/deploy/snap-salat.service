@@ -1,0 +1,35 @@
+# /etc/systemd/system/snap-salat.service
+[Unit]
+Description=Snap Salat prayer-times server
+After=network.target
+
+[Service]
+Type=simple
+User=snapsalat
+Group=snapsalat
+WorkingDirectory=/opt/snap-salat
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning server/server.mjs
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+Environment=DATA_DIR=/var/lib/snap-salat
+# systemd creates /var/lib/snap-salat owned by the service user.
+StateDirectory=snap-salat
+Restart=on-failure
+RestartSec=5
+
+# Hardening: the service can only write its data directory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

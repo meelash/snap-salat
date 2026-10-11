@@ -1,0 +1,42 @@
+# Snap Salat in Docker.
+#
+# Standalone (nothing else serving HTTPS on the machine), with its own Caddy:
+#   SNAP_DOMAIN=snapsalat.example.org docker compose --profile standalone up -d
+#
+# Behind another stack's Caddy (e.g. the bulletin-board's): leave out the
+# profile; that Caddy proxies to snap-salat:8080 over the shared "edge"
+# network, which also lets Snap Salat reach the announcement list directly.
+services:
+  snap-salat:
+    image: ${IMAGE:-snap-salat:latest}
+    container_name: snap-salat
+    restart: unless-stopped
+    volumes:
+      - snap-salat-data:/data
+    networks:
+      - edge
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: [standalone]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SNAP_DOMAIN: ${SNAP_DOMAIN:?set SNAP_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile.standalone:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+
+volumes:
+  snap-salat-data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  edge:
+    name: edge

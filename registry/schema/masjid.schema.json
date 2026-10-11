@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/meelash/snap-salat/main/registry/schema/masjid.schema.json",
+  "title": "Snap Salat masjid registry entry",
+  "description": "One masjid whose prayer times can be updated from the Snap Salat app. File path: registry/masajid/<country>/<region>/<city>/<masjid>.json, all lowercase slugs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "country", "region", "city", "api"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "minLength": 2, "maxLength": 120, "description": "Masjid name as people know it." },
+    "country": { "type": "string", "pattern": "^[A-Z]{2}$", "description": "ISO 3166-1 alpha-2 code, e.g. US, GB, PK." },
+    "region": { "type": "string", "minLength": 1, "description": "State, province or region." },
+    "city": { "type": "string", "minLength": 1 },
+    "area": { "type": "string", "description": "Optional neighbourhood or district, to tell apart masajid in big cities." },
+    "api": { "type": "string", "pattern": "^https://", "description": "Base URL of the Snap Salat API (see docs/api.md). Must be HTTPS." },
+    "website": { "type": "string", "pattern": "^https?://" },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lat", "lng"],
+      "properties": {
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lng": { "type": "number", "minimum": -180, "maximum": 180 }
+      }
+    },
+    "display": {
+      "type": "object",
+      "description": "Optional hints about the masjid's display so the app guesses less.",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["analog-clocks", "text"] },
+        "order": { "enum": ["rtl-rows", "ltr-rows", "rtl-columns", "ltr-columns"], "description": "Reading order of the prayer clocks." },
+        "sequence": {
+          "type": "array",
+          "items": { "enum": ["fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha", "jumuah"] },
+          "description": "Prayers in that reading order."
+        },
+        "current_time_clock": { "type": "boolean", "description": "Whether the board has a bigger clock showing the current time." }
+      }
+    },
+    "maintainers": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9-]+$" },
+      "description": "GitHub usernames who may update this entry."
+    }
+  }
+}

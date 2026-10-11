@@ -1,0 +1,11 @@
+{
+  "name": "snap-salat-server",
+  "private": true,
+  "type": "module",
+  "description": "Example Snap Salat server: the API (docs/api.md), an admin page, and a prayer-times widget. No dependencies.",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.mjs\""
+  }
+}

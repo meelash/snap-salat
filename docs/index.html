@@ -1,0 +1,95 @@
+---
+title: Snap Salat
+hero: true
+wide: true
+description: Photograph your masjid's prayer-time board; the app reads it, you check it, and your website, widget and announcements update.
+---
+
+<section class="section">
+  <p class="eyebrow">How it works</p>
+  <h2>Three steps, about a minute</h2>
+  <div class="cards">
+    <div class="card"><div class="num">1</div><h3>Photograph the board</h3>
+      <p>Analog clock boards, printed or handwritten timetables, and screens. The photo is read on the phone.</p></div>
+    <div class="card"><div class="num">2</div><h3>Check every time</h3>
+      <p>Each time is pinned on the photo. Anything the app wasn’t sure of is marked <b>Please check</b>. Tap to fix.</p></div>
+    <div class="card"><div class="num">3</div><h3>Send it</h3>
+      <p>The masjid’s server gets the times and when the photo was taken, so stale photos can’t overwrite fresh times.</p></div>
+  </div>
+</section>
+
+<section class="section split">
+  <div>
+    <p class="eyebrow">Reading the board</p>
+    <h2>Built for real masjid boards</h2>
+    <p>The app finds each clock on a board even through glass, glare and reflections, reads its hands, works out AM and
+      PM, and figures out which clock is which prayer from the layout and the time of day. A bigger “current time” clock is
+      read too and compared with the photo’s timestamp, which is a quick check that the photo is fresh.</p>
+    <ul class="checks">
+      <li><b>Analog clock boards</b>, one clock per prayer</li>
+      <li><b>Printed, written and on-screen timetables</b>, in rows or columns, with or without separate adhan columns,
+        prayer names in English or Arabic</li>
+      <li>Readings it isn’t sure of are <b>flagged, never silently guessed</b></li>
+      <li>The time the photo was taken comes from the camera and <b>can’t be edited</b></li>
+    </ul>
+    <p><a href="{{ '/how-it-works.html' | relative_url }}">How the reading works →</a></p>
+  </div>
+  <figure>
+    <img src="{{ '/assets/img/app-review-board.png' | relative_url }}" alt="The board photo in the app, with a numbered pin on each prayer clock and a clock pin on the current-time clock" width="600" height="769" style="max-width: 420px; display: block; margin: 0 auto;">
+    <figcaption style="text-align: center">Each clock found gets a numbered pin; amber pins need a second look.</figcaption>
+  </figure>
+</section>
+
+<section class="section panel">
+  <p class="eyebrow" style="color: var(--brass)">For masajid</p>
+  <h2>A server you can run yourself</h2>
+  <div class="split">
+    <div>
+      <p>The <a href="{{ '/server.html' | relative_url }}">example server</a> is a complete, small service for one masjid,
+        with no dependencies and one SQLite file. Deploy it on any small VPS in a few minutes.</p>
+      <ul class="checks">
+        <li><b>Approve volunteers</b>: anyone can register in the app, but only people you approve can update times</li>
+        <li><b>Maghrib from sunset</b>, or a few minutes after, if your board’s Maghrib clock isn’t kept up to date</li>
+        <li><b>A widget for your website</b> in one line of HTML, plus JSON for your own designs</li>
+        <li><b>Announcements</b>: drafts a “prayer times are changing” post in your announcement list when the times really change</li>
+        <li>Every update kept with its <b>photo</b>, so you can always check it</li>
+      </ul>
+      <div class="buttons" style="margin-top: 20px">
+        <a class="button primary" href="{{ '/server.html' | relative_url }}">Example server</a>
+        <a class="button ghost" href="{{ '/api.html' | relative_url }}">Or build on the API</a>
+      </div>
+    </div>
+    <figure style="margin: 0">
+      <img src="{{ '/assets/img/admin-overview.png' | relative_url }}" alt="The server's admin page: today's published times, volunteers waiting for approval, and recent announcements" width="1100" height="1075" style="border-color: var(--line-dark)">
+    </figure>
+  </div>
+</section>
+
+<section class="section split flip">
+  <div>
+    <p class="eyebrow">On your website</p>
+    <h2>Times that update themselves</h2>
+    <p>Add one line to any page and the masjid’s current iqamah times appear, styled in dark or light, with the next
+      prayer highlighted and Maghrib labelled when it follows sunset.</p>
+    <pre><code>&lt;script src="https://your-server/widget.js" async&gt;&lt;/script&gt;</code></pre>
+    <p class="muted">Or an iframe, or the raw JSON at <code>/prayer-times.json</code> for your own design.</p>
+  </div>
+  <div class="widgets">
+    <img src="{{ '/assets/img/widget-dark.png' | relative_url }}" alt="Prayer-times widget, dark theme" width="600" height="779">
+    <img src="{{ '/assets/img/widget-light.png' | relative_url }}" alt="Prayer-times widget, light theme" width="600" height="779">
+  </div>
+</section>
+
+<section class="section">
+  <p class="eyebrow">Open</p>
+  <h2>An open API, so any masjid website can join</h2>
+  <div class="cards">
+    <div class="card"><h3><a href="{{ '/api.html' | relative_url }}">The API</a></h3>
+      <p>Five small JSON endpoints: register, sign in, check approval, send times, read times. An
+        <a href="{{ '/openapi.yaml' | relative_url }}">OpenAPI description</a> is included.</p></div>
+    <div class="card"><h3><a href="{{ '/adding-a-masjid.html' | relative_url }}">The directory</a></h3>
+      <p>List your masjid in the app with a one-file pull request, so volunteers can pick it instead of typing an address.</p></div>
+    <div class="card"><h3><a href="https://github.com/{{ site.repository }}">The source</a></h3>
+      <p>The app (Android and iPhone, built with Flutter), the board reader, the server and these docs, all on GitHub.</p></div>
+  </div>
+</section>

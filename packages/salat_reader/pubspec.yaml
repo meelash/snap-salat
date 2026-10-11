@@ -1,0 +1,13 @@
+name: salat_reader
+description: Reads congregation (iqamah) prayer times from photos of masjid prayer-time displays.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  image: ^4.1.3
+
+dev_dependencies:
+  test: ^1.24.0

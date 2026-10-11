@@ -1,0 +1,12 @@
+# HTTPS for Snap Salat when it has the machine to itself.
+{$SNAP_DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 20MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+	}
+	reverse_proxy snap-salat:8080
+}

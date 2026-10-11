@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  reader-and-api:
+    name: Dart packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      # The API client's interop test runs the example server.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: salat_reader
+        working-directory: packages/salat_reader
+        run: |
+          dart pub get
+          dart analyze --fatal-infos
+          dart test
+      - name: snap_salat_api
+        working-directory: packages/snap_salat_api
+        run: |
+          dart pub get
+          dart analyze --fatal-infos
+          dart test
+
+  server-and-registry:
+    name: Example server and registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Server tests
+        working-directory: server
+        run: npm test
+      - run: node --test tools/build-registry.test.mjs
+      - run: node tools/build-registry.mjs --check
+
+  app:
+    name: Flutter app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Analyze and test
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Build Android APK
+        working-directory: app
+        run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snap-salat-debug-apk
+          path: app/build/app/outputs/flutter-apk/app-debug.apk

@@ -1,0 +1,7 @@
+# /etc/caddy/Caddyfile
+# Caddy gets and renews the HTTPS certificate by itself. Replace the domain
+# with yours, and point its DNS A record at this server first.
+prayer.example.org {
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+}

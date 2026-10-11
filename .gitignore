@@ -1,0 +1,22 @@
+# Old reference-server data
+snap-salat-data.json
+node_modules/
+
+# Dart / Flutter
+.dart_tool/
+build/
+*.iml
+.flutter-plugins
+.flutter-plugins-dependencies
+packages/*/pubspec.lock
+
+# IDEs / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Example server data (database, photos)
+server/data/
+*.db
+*.db-shm
+*.db-wal
