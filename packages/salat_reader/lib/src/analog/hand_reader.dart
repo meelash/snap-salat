@@ -138,6 +138,9 @@ class HandReader {
   static const _rhoStep = 1 / _rc;
   static const _rhoMax = 0.9;
 
+  /// Where numerals may begin, as a fraction of the radius.
+  static const _innerFit = 0.55;
+
   /// Whether [face] looks like a real dial (has numerals or ticks).
   bool isDial(Raster src, ClockFace face) =>
       _Dial.sample(src, face, _rc).texture >= _minTexture;
@@ -150,12 +153,43 @@ class HandReader {
     final texture = dial.texture;
     debug?.add('  dial texture ${texture.toStringAsFixed(3)}');
     if (texture < _minTexture) return null;
-    var px = _rc.toDouble(), py = _rc.toDouble();
+    final centred = _readFrom(
+        dial, face, _rc.toDouble(), _rc.toDouble(), rollDegrees, debug);
+    if (centred != null && centred.traced >= 2) return centred.reading;
+    // Fewer than two hands seen from the dial's centre: either they
+    // overlap, or the pivot is off-centre and rays miss a hand. Try the
+    // pivot found by search, and prefer it if its reading fits clearly
+    // better with two real hands. Off-centre, the counterweight of
+    // overlapping hands can pass for a short hour hand, and overlapping
+    // hands carry a prior, so that wrong reading can undercut the right one.
+    final (hx, hy) = _findHub(dial);
+    debug?.add('  hub (${hx.toStringAsFixed(1)}, ${hy.toStringAsFixed(1)})');
+    final hub = _readFrom(dial, face, hx, hy, rollDegrees, debug);
+    if (hub == null || hub.traced < 2) return centred?.reading;
+    final best = hub.reading.best;
+    final twoHands = !best.handsOverlap &&
+        math.min(best.hourHand.length, best.minuteHand.length) >= 0.4;
+    if (twoHands &&
+        (centred == null || best.cost < centred.reading.best.cost - 1)) {
+      debug?.add('  using the searched pivot');
+      return hub.reading;
+    }
+    return centred?.reading;
+  }
+
+  /// Reads the hands seen from a first guess at the pivot ([px], [py]),
+  /// and how many of them were traced well.
+  ({ClockTimeReading reading, int traced})? _readFrom(_Dial dial,
+      ClockFace face, double px, double py, double rollDegrees,
+      List<String>? debug) {
     var hands = _findHands(dial, px, py, hubLimit: 0.2);
     debug?.add('  initial candidates: ${hands.join(' | ')}');
+    // Only well-traced hands give a reliable line.
+    List<_Hand> tracedIn(List<_Hand> hands) =>
+        hands.where((h) => h.span >= 0.25).toList();
+    final traced = tracedIn(hands).length;
     for (var pass = 0; pass < 3; pass++) {
-      // Only well-traced hands give a reliable line.
-      final traced = hands.where((h) => h.span >= 0.25).toList();
+      final traced = tracedIn(hands);
       if (traced.length < 2) break;
       final pivot = _intersect(traced[0], traced[1], px, py);
       if (pivot == null) break;
@@ -178,7 +212,7 @@ class HandReader {
       for (final h in hands)
         h.rotated(rollDegrees)
     ];
-    return _interpret(pivoted, adjusted);
+    return (reading: _interpret(pivoted, adjusted), traced: traced);
   }
 
   /// Where the centre lines of two hands cross, if they are far enough
@@ -297,47 +331,98 @@ class HandReader {
     return d;
   }
 
-  /// Candidate hands around pivot ([px], [py]), longest first.
-  List<_Hand> _findHands(_Dial dial, double px, double py,
-      {required double hubLimit}) {
-    const n = _thetaBins;
+  /// Where the hands' pivot is, in canonical coordinates.
+  ///
+  /// The dial's outline is a poor guide: seen at an angle, the bezel's
+  /// depth shifts it by up to a tenth of the radius, and from there a ray
+  /// runs beside a hand instead of along it, so the hand is missed or its
+  /// angle skewed. Only on a hand's line does a dark run stretch the whole
+  /// hand plus its tail (forwards and backwards together, so sliding along
+  /// the line changes nothing), and only at the pivot is that true for two
+  /// hands at once. Search for that point coarse to fine, preferring the
+  /// centre when it's a tie.
+  (double, double) _findHub(_Dial dial) {
+    double score(double x, double y) {
+      final run = _reach(dial, x, y, bins: 360, hubLimit: 0.06, run: true);
+      final line = Float64List(360);
+      for (var t = 0; t < 360; t++) {
+        line[t] = run[t] + run[(t + 180) % 360];
+      }
+      final top = [
+        for (final (t, v) in _peaks(line, 0.4))
+          if (t < 180) v
+      ]..sort((a, b) => b.compareTo(a));
+      final off = math.sqrt(math.pow(x - _rc, 2) + math.pow(y - _rc, 2)) / _rc;
+      return top.take(2).fold(0.0, (s, v) => s + v) - 0.5 * off;
+    }
+
+    var bx = _rc.toDouble(), by = _rc.toDouble();
+    var best = score(bx, by);
+    for (final (step, span) in [(0.04 * _rc, 3), (0.012 * _rc, 2)]) {
+      final cx = bx, cy = by;
+      for (var i = -span; i <= span; i++) {
+        for (var j = -span; j <= span; j++) {
+          final x = cx + i * step, y = cy + j * step;
+          if (math.pow(x - _rc, 2) + math.pow(y - _rc, 2) >
+              math.pow(0.15 * _rc, 2)) {
+            continue;
+          }
+          final s = score(x, y);
+          if (s > best) {
+            best = s;
+            bx = x;
+            by = y;
+          }
+        }
+      }
+    }
+    return (bx, by);
+  }
+
+  /// For each of [bins] angles around ([px], [py]), how far a dark run
+  /// that starts within [hubLimit] of it reaches (fraction of the radius),
+  /// or with [run], how long that run is.
+  static Float64List _reach(_Dial dial, double px, double py,
+      {required int bins, required double hubLimit, bool run = false}) {
+    final n = bins;
     final steps = (_rhoMax / _rhoStep).floor();
-    final dark = Uint8List(n * steps);
+    final hubSteps = (hubLimit / _rhoStep).round();
+    const maxGap = 5;
+    final reach = Float64List(n);
     for (var t = 0; t < n; t++) {
       final a = t * 2 * math.pi / n;
       final s = math.sin(a), c = math.cos(a);
-      for (var j = 0; j < steps; j++) {
+      bool dark(int j) {
         final r = (j + 0.5) * _rhoStep * _rc;
-        if (dial.isHandDark(px + r * s, py - r * c)) dark[t * steps + j] = 1;
+        return dial.isHandDark(px + r * s, py - r * c);
       }
-    }
 
-    // Reach of the dark run that starts at the hub, per angle.
-    final reach = Float64List(n);
-    final hubSteps = (hubLimit / _rhoStep).round();
-    const maxGap = 5;
-    for (var t = 0; t < n; t++) {
       var j = 0;
-      while (j < hubSteps && dark[t * steps + j] == 0) {
+      while (j < hubSteps && !dark(j)) {
         j++;
       }
       if (j >= hubSteps) continue;
+      final first = j;
       var last = j, gap = 0;
       for (; j < steps; j++) {
-        if (dark[t * steps + j] == 1) {
+        if (dark(j)) {
           last = j;
           gap = 0;
         } else if (++gap > maxGap) {
           break;
         }
       }
-      reach[t] = (last + 1) * _rhoStep;
+      reach[t] = (last + 1 - (run ? first : 0)) * _rhoStep;
     }
+    return reach;
+  }
 
-    // Peaks: local maxima longer than counterweight tails.
-    final hands = <_Hand>[];
-    const minReach = 0.28;
-    const nmsBins = 8 * n ~/ 360;
+  /// Local maxima of [reach] (within ±8°) of at least [minReach], as
+  /// (bin, reach).
+  static List<(int, double)> _peaks(Float64List reach, double minReach) {
+    final n = reach.length;
+    final nmsBins = 8 * n ~/ 360;
+    final out = <(int, double)>[];
     for (var t = 0; t < n; t++) {
       final v = reach[t];
       if (v < minReach) continue;
@@ -349,7 +434,20 @@ class HandReader {
           break;
         }
       }
-      if (!isMax) continue;
+      if (isMax) out.add((t, v));
+    }
+    return out;
+  }
+
+  /// Candidate hands around pivot ([px], [py]), longest first.
+  List<_Hand> _findHands(_Dial dial, double px, double py,
+      {required double hubLimit}) {
+    const n = _thetaBins;
+    final reach = _reach(dial, px, py, bins: n, hubLimit: hubLimit);
+
+    // Peaks: longer than counterweight tails.
+    final hands = <_Hand>[];
+    for (final (t, v) in _peaks(reach, 0.28)) {
       final hand = _fitHand(dial, px, py, t * 360 / n, v);
       // Shorter than a counterweight tail once fitted: not a hand.
       if (hand != null && hand.length >= 0.25) hands.add(hand);
@@ -381,7 +479,7 @@ class HandReader {
     final from = 0.2 * _rc;
     final to = math.max(0.3, reach * 0.9) * _rc;
 
-    List<(double, double, double)> centroids() {
+    List<(double, double, double)> centroids(double to) {
       final out = <(double, double, double)>[];
       // Distance along the line from its point to the pivot's foot.
       final base = (px - lx) * ux + (py - ly) * uy;
@@ -403,7 +501,11 @@ class HandReader {
 
     var pts = <(double, double, double)>[];
     for (var iter = 0; iter < 3; iter++) {
-      pts = centroids();
+      // Numerals start about halfway out, and one nearly in line with the
+      // hand (the 1 of 12 beside a minute hand at 12) can drag the whole
+      // fit onto it. So the first fit uses only the inner part of the hand;
+      // once the line is on the hand, the numeral falls outside the window.
+      pts = centroids(iter == 0 ? math.min(to, _innerFit * _rc) : to);
       if (pts.length < 10) return null;
       final xs = [for (final p in pts) p.$1], ys = [for (final p in pts) p.$2];
       var idx = List<int>.generate(pts.length, (i) => i);
