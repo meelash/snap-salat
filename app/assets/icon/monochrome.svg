@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 108 108">
+  <!-- Android 13+ themed icon: one colour; the system tints it. -->
+  <defs>
+    <mask id="crescent">
+      <circle cx="51" cy="54" r="12" fill="#fff"/>
+      <circle cx="56.5" cy="50.5" r="10.5" fill="#000"/>
+    </mask>
+  </defs>
+  <circle cx="54" cy="54" r="26" fill="none" stroke="#fff" stroke-width="5"/>
+  <circle cx="51" cy="54" r="12" fill="#fff" mask="url(#crescent)"/>
+</svg>

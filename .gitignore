@@ -20,3 +20,8 @@ server/data/
 *.db
 *.db-shm
 *.db-wal
+
+# Notification relay: the Firebase key and local data must never be committed
+relay/service-account*.json
+relay/relay-data.json*
+.wrangler/

@@ -40,6 +40,9 @@ jobs:
       - name: Server tests
         working-directory: server
         run: npm test
+      - name: Relay tests
+        working-directory: relay
+        run: npm test
       - run: node --test tools/build-registry.test.mjs
       - run: node tools/build-registry.mjs --check
 

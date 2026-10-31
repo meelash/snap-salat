@@ -33,6 +33,18 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
   csrf TEXT NOT NULL,
   expires_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS admin_api_sessions (
+  token_hash TEXT PRIMARY KEY,
+  admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS push_devices (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  admin_id INTEGER REFERENCES admins(id) ON DELETE CASCADE,
+  platform TEXT,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS submissions (
   id INTEGER PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -103,6 +115,11 @@ export const DEFAULT_SETTINGS = {
   // Review flags on updates.
   flag_distance_m: '500', // photo taken farther than this from the masjid
   flag_clock_minutes: '15', // board clock disagrees with the photo time by more
+  // Push notifications through a relay (relay/), which holds the app's
+  // Firebase key: approvals waiting, volunteer approved, times changed.
+  push_enabled: '0',
+  push_relay_url: process.env.PUSH_RELAY_URL ?? '',
+  push_api_url: '', // this API's public address, as the app knows it
 };
 
 /** Columns added after the first release; created on older databases. */
@@ -162,6 +179,10 @@ export class Store {
   setUserStatus(id, status, by) {
     this.db.prepare('UPDATE users SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?').run(status, now(), by, id);
     if (status !== 'approved') this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+    if (status === 'revoked') this.db.prepare('DELETE FROM push_devices WHERE user_id = ?').run(id);
+  }
+  pendingCount() {
+    return this.db.prepare("SELECT COUNT(*) AS n FROM users WHERE status = 'pending'").get().n;
   }
   deleteUser(id) {
     this.db.prepare('DELETE FROM users WHERE id = ?').run(id);
@@ -199,6 +220,34 @@ export class Store {
   }
   deleteAdminSession(tokenHash) {
     this.db.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').run(tokenHash);
+  }
+  // Admins signed in to the app (bearer tokens, like volunteers').
+  addAdminApiSession(tokenHash, adminId, expiresAt) {
+    this.db.prepare('INSERT INTO admin_api_sessions(token_hash, admin_id, expires_at) VALUES (?, ?, ?)').run(tokenHash, adminId, expiresAt);
+  }
+  adminApiSession(tokenHash) {
+    return this.db
+      .prepare(`SELECT admins.id, admins.username FROM admin_api_sessions JOIN admins ON admins.id = admin_api_sessions.admin_id
+        WHERE token_hash = ? AND expires_at > ?`)
+      .get(tokenHash, Date.now());
+  }
+
+  // --- push devices: one row per app install, for the account signed in on it
+  addPushDevice(token, { userId = null, adminId = null, platform = null }) {
+    this.db
+      .prepare(`INSERT INTO push_devices(token, user_id, admin_id, platform, created_at) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(token) DO UPDATE SET user_id = excluded.user_id, admin_id = excluded.admin_id, platform = excluded.platform`)
+      .run(token, userId, adminId, platform, now());
+  }
+  removePushDevices(tokens) {
+    const del = this.db.prepare('DELETE FROM push_devices WHERE token = ?');
+    for (const t of tokens) del.run(t);
+  }
+  adminPushTokens() {
+    return this.db.prepare('SELECT token FROM push_devices WHERE admin_id IS NOT NULL').all().map((r) => r.token);
+  }
+  userPushTokens(userId) {
+    return this.db.prepare('SELECT token FROM push_devices WHERE user_id = ?').all(userId).map((r) => r.token);
   }
 
   // --- submissions and current times

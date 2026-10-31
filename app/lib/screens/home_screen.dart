@@ -9,9 +9,11 @@ import '../config.dart';
 import '../main.dart';
 import '../services/recognition.dart';
 import '../theme.dart';
+import '../widgets/current_times_card.dart';
 import 'masjid_picker_screen.dart';
 import 'review_screen.dart';
 import 'sign_in_screen.dart';
+import 'volunteers_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -136,8 +138,8 @@ class HomeScreen extends StatelessWidget {
                             ),
                             if (masjid != null && state.signedIn) ...[
                               const SizedBox(height: 3),
-                              _StatusLine(
-                                  state.status, state.session?.userName),
+                              _StatusLine(state.status, state.session?.userName,
+                                  admin: state.isAdmin),
                             ],
                           ],
                         ),
@@ -158,6 +160,18 @@ class HomeScreen extends StatelessWidget {
                     ? Wrap(
                         alignment: WrapAlignment.end,
                         children: [
+                          if (state.isAdmin)
+                            TextButton.icon(
+                              icon: Badge(
+                                isLabelVisible: (state.pendingCount ?? 0) > 0,
+                                label: Text('${state.pendingCount}'),
+                                child:
+                                    const Icon(Icons.group_outlined, size: 20),
+                              ),
+                              label: const Text('Volunteers'),
+                              onPressed: () =>
+                                  _open(context, const VolunteersScreen()),
+                            ),
                           if (state.status == VolunteerStatus.pending)
                             TextButton.icon(
                               icon: const Icon(Icons.refresh, size: 18),
@@ -175,6 +189,13 @@ class HomeScreen extends StatelessWidget {
                         onPressed: () => _open(context, const SignInScreen()),
                       ),
               ),
+            ),
+
+          // What the website has now, so it's clear whether it needs updating.
+          if (masjid != null)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: CurrentTimesCard(),
             ),
 
           // How it works.
@@ -251,7 +272,8 @@ class _Step extends StatelessWidget {
 class _StatusLine extends StatelessWidget {
   final VolunteerStatus? status;
   final String? name;
-  const _StatusLine(this.status, this.name);
+  final bool admin;
+  const _StatusLine(this.status, this.name, {this.admin = false});
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +286,10 @@ class _StatusLine extends StatelessWidget {
           'Not allowed to send times. Ask the masjid.',
           Brand.error
         ),
-      _ => ('Signed in${name != null ? ' as $name' : ''}', Brand.ok),
+      _ => (
+          'Signed in${name != null ? ' as $name' : ''}${admin ? ' · admin' : ''}',
+          Brand.ok
+        ),
     };
     return Text(text,
         style: TextStyle(

@@ -126,4 +126,36 @@ void main() {
               .having((e) => e.needsSignIn, 'needsSignIn', isTrue)));
     });
   });
+
+  group('optional replies', () {
+    test('current times: sunset Maghrib, and junk values ignored', () {
+      final t = CurrentTimes.fromJson({
+        'captured_at': '2026-10-09T16:53:38-04:00',
+        'date': '2026-10-09',
+        'iqamah': {'fajr': '06:15', 'maghrib': '18:01', 'odd': 3},
+        'maghrib': {'source': 'sunset', 'sunset': '17:58'},
+      });
+      expect(t.iqamah, {'fajr': '06:15', 'maghrib': '18:01'});
+      expect(t.maghribFromSunset, isTrue);
+      expect(t.capturedTime!.toUtc(), DateTime.utc(2026, 10, 9, 20, 53, 38));
+      expect(t.date, '2026-10-09');
+    });
+
+    test('info names the push relay when the server sends notifications', () {
+      final base = {
+        'api': 'snap-salat',
+        'masjid': {'name': 'M'},
+        'auth': {
+          'methods': ['password']
+        },
+      };
+      expect(ServerInfo.fromJson(base).pushRelay, isNull);
+      expect(
+          ServerInfo.fromJson({
+            ...base,
+            'push': {'relay': 'https://push.example'}
+          }).pushRelay,
+          Uri.parse('https://push.example'));
+    });
+  });
 }

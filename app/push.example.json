@@ -1,0 +1,10 @@
+{
+  "PUSH_RELAY_URL": "https://snap-salat-relay.example.workers.dev",
+  "FIREBASE_PROJECT_ID": "snap-salat",
+  "FIREBASE_SENDER_ID": "123456789012",
+  "FIREBASE_ANDROID_APP_ID": "1:123456789012:android:0123456789abcdef",
+  "FIREBASE_ANDROID_API_KEY": "AIza...",
+  "FIREBASE_IOS_APP_ID": "1:123456789012:ios:0123456789abcdef",
+  "FIREBASE_IOS_API_KEY": "AIza...",
+  "FIREBASE_IOS_BUNDLE_ID": "org.snapsalat.snapSalat"
+}

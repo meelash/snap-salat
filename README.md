@@ -54,7 +54,9 @@ Implement these under any HTTPS base URL, e.g. `https://yourmasjid.org/snap-sala
 | `POST /auth/login` | Username and password in, `{"access_token": ..., "user": {"status": ...}}` out |
 | `GET /auth/check` | Token still valid? Volunteer `pending`, `approved` or `revoked`? |
 | `POST /prayer-times` | Bearer-authenticated. Receives `captured_at`, `captured_at_source`, `date`, `iqamah` (incl. `jumuah`), optional `adhan`, `display_clock`, … |
-| `GET /prayer-times` | Optional. Current times |
+| `GET /prayer-times` | Optional. Current times, shown in the app so volunteers see what needs updating |
+| `GET /volunteers`, `POST /volunteers/{id}/approve` | Optional. Admins approve volunteers in the app |
+| `POST /push/register` | Optional. Push notifications through the [relay](relay/) |
 
 Times are 24-hour `HH:MM` local to the masjid. `captured_at` is the ISO 8601
 time the photo was taken, with UTC offset. Use it to reject photos that are
@@ -70,7 +72,10 @@ SQLite built in), and is meant to be deployed for real:
 
 - an **admin page** to approve or revoke volunteers, review each update with
   its photo, and set Maghrib to follow the board or to be calculated from
-  sunset (plus an offset);
+  sunset (plus an offset). Admins can also approve volunteers from the app;
+- optional **push notifications**, through the [relay](relay/): new
+  volunteers waiting, approvals, and changed times for anyone following the
+  masjid;
 - **public prayer times** as JSON and as a styled **widget** for the
   masjid's website, added with one line of HTML (or an iframe).
 
@@ -84,6 +89,7 @@ app/                    Flutter app (Android + iOS)
 packages/salat_reader/  Pure-Dart display reader: analog clock boards + OCR-text parser
 packages/snap_salat_api/  Pure-Dart API client
 server/                 Example server: API, admin page, website widget (Node, no dependencies) + tests
+relay/                  Push notification relay: masjid servers → Firebase Cloud Messaging (Cloudflare Workers or Node)
 registry/               Masjid directory: one JSON file per masjid, schema, built index.json
 tools/                  build-registry.mjs (validates entries, builds the index)
 docs/                   The website (GitHub Pages): user guide, example server, API spec, OpenAPI, directory, how it works
@@ -123,8 +129,9 @@ silently.
 cd packages/salat_reader && dart test     # includes the real sample photo and randomized synthetic boards
 cd packages/snap_salat_api && dart test
 
-# Reference server and directory tooling (Node 18+)
+# Reference server, notification relay and directory tooling (Node 22+)
 (cd server && npm test)
+(cd relay && npm test)
 node --test tools/build-registry.test.mjs
 node tools/build-registry.mjs              # rebuild registry/index.json + app/assets/registry.json
 

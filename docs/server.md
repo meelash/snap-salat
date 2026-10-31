@@ -24,6 +24,11 @@ update the times**. The admin page lists new sign-ups with their name, contact
 and note. Approve or decline each one, and revoke anyone later; revoking signs
 them out immediately. You can also close sign-ups altogether.
 
+Admins can do the same from the app: sign in there with your admin
+username and password, and a **Volunteers** screen appears. With
+[notifications](#sends-notifications) on, admins hear as soon as someone
+registers, and volunteers hear when they're approved.
+
 <figure>
   <img src="{{ '/assets/img/admin-overview.png' | relative_url }}" alt="Admin overview: today's published times, volunteers waiting for approval and approved, recent announcements" width="1100" height="1075">
   <figcaption>The admin overview: what's published today, who last updated it (from which photo, and what the board's clock showed), volunteers, and announcements.</figcaption>
@@ -131,6 +136,21 @@ Sending happens in the background, so it never delays a volunteer. **Save and
 test connection** checks your API key, the `prayer_times` template and its
 category without creating anything. The overview shows each post's live
 status, with a **Retry** button for any that failed.
+
+### Sends notifications
+
+With **Settings → Notifications** on, the app can notify:
+
+- admins when a volunteer is waiting for approval;
+- a volunteer when they're approved;
+- anyone who taps **Notify me when these times change** for your masjid in
+  the app, whenever an iqamah time changes.
+
+The notifications go through Snap Salat's
+[notification relay](https://github.com/meelash/snap-salat/tree/main/relay),
+which holds the app's Firebase key. The relay reads your public prayer times
+itself, so a "times changed" notification always shows what your website
+really says.
 
 ## Deploying it
 

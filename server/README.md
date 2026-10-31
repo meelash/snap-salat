@@ -272,6 +272,27 @@ announcements with each post's live status from `GET /api/v1/posts/<id>`
 (draft → pending approval → approved → sent), and has a **Retry** button for
 any that failed.
 
+## Notifications
+
+The server can send push notifications to the app: admins hear when a
+volunteer registers, a volunteer hears when they're approved, and anyone
+following the masjid in the app hears when the iqamah times change. They go
+through the [notification relay](../relay/), which holds the app's Firebase
+key. Turn them on under **Settings → Notifications**:
+
+- **Notification relay** is the relay the app is built for. Setting
+  `PUSH_RELAY_URL` fills it in.
+- **This server's address in the app** must be the API address exactly as
+  the app knows it, from the masjid directory or as volunteers type it, e.g.
+  `https://yourmasjid.org/snap-salat`. When it's blank, the address you're
+  using the admin page on is used.
+
+Admins also get the app's **Volunteers** screen: sign in to the app with
+your admin-page username and password. Admins can send times as well.
+
+Sending happens in the background, so a slow relay never delays anyone.
+Problems are logged as `push … failed`.
+
 ## Command line
 
 | Command | What it does |
@@ -290,3 +311,4 @@ Environment variables:
 | `DATA_DIR` | `./data` | Where the database and photos go |
 | `INSECURE_COOKIES` | unset | `1` allows the admin cookie over plain http, for local testing only |
 | `ADMIN_PASSWORD` | unset | Password for `create-admin`, instead of being asked |
+| `PUSH_RELAY_URL` | unset | Default for the notification relay setting |

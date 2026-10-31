@@ -18,6 +18,7 @@ import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { openDb } from './src/db.mjs';
 import { createApp, API_BASE } from './src/app.mjs';
+import { pusher } from './src/push.mjs';
 import { hashPassword } from './src/util.mjs';
 
 const dataDir = resolve(process.env.DATA_DIR ?? './data');
@@ -49,6 +50,7 @@ switch (command) {
     const user = store.userByName(arg ?? '');
     if (!user) throw new Error(`No volunteer named "${arg}".`);
     store.setUserStatus(user.id, 'approved', 'cli');
+    await pusher({ store, log }).approved(user.id);
     console.log(`${user.username} can now update the times.`);
     break;
   }

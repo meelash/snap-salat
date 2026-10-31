@@ -31,6 +31,26 @@ components:
         name: { type: string }
         username: { type: string }
         status: { enum: [pending, approved, revoked] }
+        role:
+          enum: [volunteer, admin]
+          default: volunteer
+          description: admin may also approve volunteers (GET /volunteers)
+    Volunteer:
+      type: object
+      required: [id, username, name, status]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        name: { type: string }
+        contact: { type: [string, 'null'] }
+        note: { type: [string, 'null'] }
+        status: { enum: [pending, approved, revoked] }
+        registered_at: { type: string, format: date-time }
+    VolunteerReply:
+      type: object
+      required: [volunteer]
+      properties:
+        volunteer: { $ref: '#/components/schemas/Volunteer' }
     HHMM:
       type: string
       pattern: '^([01]\d|2[0-3]):[0-5]\d$'
@@ -97,6 +117,12 @@ paths:
                       adhan: { type: boolean, default: true }
                       image: { type: boolean, default: false }
                   max_age_minutes: { type: integer, minimum: 1 }
+                  push:
+                    type: object
+                    description: Present only if the server sends push notifications
+                    required: [relay]
+                    properties:
+                      relay: { type: string, format: uri, description: The notification relay used (relay/) }
   /auth/register:
     post:
       summary: A volunteer asks for an account; it starts pending until the masjid approves it
@@ -214,6 +240,12 @@ paths:
                   date: { type: string, format: date }
                   iqamah: { $ref: '#/components/schemas/Iqamah' }
                   adhan: { $ref: '#/components/schemas/Adhan' }
+                  maghrib:
+                    type: object
+                    properties:
+                      source:
+                        enum: [board, sunset]
+                        description: sunset when Maghrib is calculated, not taken from the board
         '404':
           description: Not offered, or no times yet
     post:
@@ -297,3 +329,83 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /volunteers:
+    get:
+      summary: Everyone who has registered (optional; admins only)
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: Volunteers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [volunteers]
+                properties:
+                  volunteers:
+                    type: array
+                    items: { $ref: '#/components/schemas/Volunteer' }
+        '401': { description: Sign in again }
+        '403': { description: Not an admin (error forbidden) }
+  /volunteers/{id}/approve:
+    post:
+      summary: Let a volunteer send times (optional; admins only)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Approved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VolunteerReply' }
+        '401': { description: Sign in again }
+        '403': { description: Not an admin (error forbidden) }
+        '404': { description: No such volunteer }
+  /volunteers/{id}/revoke:
+    post:
+      summary: Decline a pending volunteer, or withdraw an approved one's permission (optional; admins only)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VolunteerReply' }
+        '401': { description: Sign in again }
+        '403': { description: Not an admin (error forbidden) }
+        '404': { description: No such volunteer }
+  /push/register:
+    post:
+      summary: This install's push token, for the signed-in account (optional)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, description: FCM registration token }
+                platform: { enum: [android, ios] }
+      responses:
+        '200': { description: Registered }
+        '401': { description: Sign in again }
+        '422': { description: Not a push token }
+  /push/unregister:
+    post:
+      summary: Stop notifying this install (optional)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200': { description: Forgotten }

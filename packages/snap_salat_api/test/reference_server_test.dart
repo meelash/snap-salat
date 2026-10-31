@@ -58,8 +58,8 @@ void main() {
     await api.register(
         username: 'yusuf', password: 'volunteer-pass', name: 'Yusuf A');
     final session = await api.login('yusuf', 'volunteer-pass');
-    expect((await api.check(session.accessToken)).status,
-        VolunteerStatus.pending);
+    expect(
+        (await api.check(session.accessToken)).status, VolunteerStatus.pending);
 
     final now = DateTime.now().subtract(const Duration(minutes: 2));
     final submission = PrayerTimesSubmission(
@@ -84,6 +84,45 @@ void main() {
     final current = await api.current();
     expect(current!.iqamah['maghrib'], '18:33');
     expect(current.iqamah['jumuah'], '13:45');
+  });
+
+  test('an admin signs in to the app and approves a volunteer', () async {
+    env['ADMIN_PASSWORD'] = 'admin-password';
+    expect((await cli(['create-admin', 'imam'])).exitCode, 0);
+    final admin = await api.login('imam', 'admin-password');
+    final me = await api.check(admin.accessToken);
+    expect(me.isAdmin, isTrue);
+    expect(me.status, VolunteerStatus.approved);
+
+    await api.register(
+        username: 'amina',
+        password: 'volunteer-pass',
+        name: 'Amina B',
+        contact: '555-0100');
+    final volunteer = await api.login('amina', 'volunteer-pass');
+    expect((await api.check(volunteer.accessToken)).isAdmin, isFalse);
+    await expectLater(
+        api.volunteers(volunteer.accessToken),
+        throwsA(isA<ApiException>()
+            .having((e) => e.forbidden, 'forbidden', isTrue)));
+
+    final amina = (await api.volunteers(admin.accessToken))
+        .firstWhere((v) => v.username == 'amina');
+    expect(amina.status, VolunteerStatus.pending);
+    expect(amina.contact, '555-0100');
+    expect(amina.registeredAt, isNotNull);
+    expect((await api.approve(admin.accessToken, amina.id)).status,
+        VolunteerStatus.approved);
+    expect((await api.check(volunteer.accessToken)).status,
+        VolunteerStatus.approved);
+    expect((await api.revoke(admin.accessToken, amina.id)).status,
+        VolunteerStatus.revoked);
+
+    // Push is off on this server, but devices can still register.
+    expect((await api.info()).pushRelay, isNull);
+    await api.registerPush(admin.accessToken, 'test-token-${'x' * 30}',
+        platform: 'android');
+    await api.unregisterPush('test-token-${'x' * 30}');
   });
 
   test('wrong password is a 401 the app can act on', () async {

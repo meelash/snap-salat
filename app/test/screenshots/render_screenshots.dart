@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:salat_reader/salat_reader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:snap_salat/app_state.dart';
+import 'package:snap_salat_api/snap_salat_api.dart';
 import 'package:snap_salat/main.dart';
 import 'package:snap_salat/screens/review_screen.dart';
 import 'package:snap_salat/services/recognition.dart';
@@ -59,6 +60,16 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
     final state = AppState();
     await tester.runAsync(state.init);
+    // Tests can't reach the server: what its website might have now.
+    state.debugSetCurrent(CurrentTimes.fromJson({
+      'captured_at': DateTime.now()
+          .subtract(const Duration(days: 2, hours: 3))
+          .toIso8601String(),
+      'iqamah': {
+        'fajr': '06:15', 'dhuhr': '13:30', 'asr': '17:00', //
+        'maghrib': '18:33', 'isha': '20:00', 'jumuah': '13:45'
+      },
+    }));
     return state;
   }
 

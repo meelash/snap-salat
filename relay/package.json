@@ -1,0 +1,11 @@
+{
+  "name": "snap-salat-relay",
+  "private": true,
+  "type": "module",
+  "description": "Push notification relay for Snap Salat: masjid servers call it, it calls Firebase Cloud Messaging. No dependencies.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node node.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

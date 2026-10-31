@@ -38,7 +38,44 @@ class Volunteer {
   final String? name;
   final VolunteerStatus status;
 
-  const Volunteer(this.name, this.status);
+  /// An admin of the masjid (signed in with their admin-page account): may
+  /// approve volunteers as well as send times.
+  final bool isAdmin;
+
+  const Volunteer(this.name, this.status, {this.isAdmin = false});
+}
+
+/// A volunteer's account, as an admin sees it (`GET /volunteers`).
+class VolunteerAccount {
+  final int id;
+  final String username;
+  final String name;
+  final String? contact;
+  final String? note;
+  final VolunteerStatus status;
+  final DateTime? registeredAt;
+
+  const VolunteerAccount({
+    required this.id,
+    required this.username,
+    required this.name,
+    this.contact,
+    this.note,
+    required this.status,
+    this.registeredAt,
+  });
+
+  factory VolunteerAccount.fromJson(Map<String, Object?> j) => VolunteerAccount(
+        id: (j['id'] as num).toInt(),
+        username: j['username'] as String? ?? '',
+        name: j['name'] as String? ?? j['username'] as String? ?? '',
+        contact: j['contact'] as String?,
+        note: j['note'] as String?,
+        status: VolunteerStatus.parse(j['status']),
+        registeredAt: j['registered_at'] == null
+            ? null
+            : DateTime.tryParse(j['registered_at'] as String),
+      );
 }
 
 /// `GET /info`: who the server is and what it accepts.
@@ -61,6 +98,10 @@ class ServerInfo {
   /// Photos older than this are rejected by the server, if set.
   final int? maxAgeMinutes;
 
+  /// The notification relay the server sends push notifications through,
+  /// if it sends any. Only an app built for that relay receives them.
+  final Uri? pushRelay;
+
   const ServerInfo({
     required this.version,
     required this.masjidName,
@@ -71,6 +112,7 @@ class ServerInfo {
     this.acceptsAdhan = true,
     this.acceptsImage = false,
     this.maxAgeMinutes,
+    this.pushRelay,
   });
 
   factory ServerInfo.fromJson(Map<String, Object?> j) {
@@ -99,6 +141,10 @@ class ServerInfo {
       acceptsAdhan: accepts['adhan'] as bool? ?? true,
       acceptsImage: accepts['image'] as bool? ?? false,
       maxAgeMinutes: (j['max_age_minutes'] as num?)?.toInt(),
+      pushRelay: switch ((j['push'] as Map?)?['relay']) {
+        final String r => Uri.tryParse(r),
+        _ => null,
+      },
     );
   }
 }
@@ -212,23 +258,47 @@ class SubmitResult {
 
 /// The times a server currently has (`GET /prayer-times`, optional).
 class CurrentTimes {
+  /// When the photo behind these times was taken, ISO 8601.
   final String? capturedAt;
   final String? updatedAt;
+
+  /// The local date these times are for, `YYYY-MM-DD`, if given.
+  final String? date;
   final Map<String, String> iqamah;
   final Map<String, String> adhan;
+
+  /// Maghrib is calculated from sunset, not taken from the board.
+  final bool maghribFromSunset;
 
   const CurrentTimes(
       {this.capturedAt,
       this.updatedAt,
+      this.date,
       this.iqamah = const {},
-      this.adhan = const {}});
+      this.adhan = const {},
+      this.maghribFromSunset = false});
 
-  factory CurrentTimes.fromJson(Map<String, Object?> j) => CurrentTimes(
-        capturedAt: j['captured_at'] as String?,
-        updatedAt: j['updated_at'] as String?,
-        iqamah: ((j['iqamah'] as Map?) ?? {}).cast<String, String>(),
-        adhan: ((j['adhan'] as Map?) ?? {}).cast<String, String>(),
-      );
+  /// [capturedAt] as a time, if it parses.
+  DateTime? get capturedTime =>
+      capturedAt == null ? null : DateTime.tryParse(capturedAt!);
+
+  bool get isEmpty => iqamah.isEmpty && adhan.isEmpty;
+
+  factory CurrentTimes.fromJson(Map<String, Object?> j) {
+    Map<String, String> times(Object? m) => {
+          if (m is Map)
+            for (final e in m.entries)
+              if (e.value is String) '${e.key}': e.value as String,
+        };
+    return CurrentTimes(
+      capturedAt: j['captured_at'] as String?,
+      updatedAt: j['updated_at'] as String?,
+      date: j['date'] as String?,
+      iqamah: times(j['iqamah']),
+      adhan: times(j['adhan']),
+      maghribFromSunset: (j['maghrib'] as Map?)?['source'] == 'sunset',
+    );
+  }
 }
 
 /// ISO 8601 local time with its UTC offset, e.g. `2026-10-09T16:53:38-04:00`.

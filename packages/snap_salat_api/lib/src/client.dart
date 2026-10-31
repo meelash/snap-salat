@@ -31,6 +31,9 @@ class ApiException implements Exception {
   /// volunteer.
   bool get notApproved => code == 'not_approved';
 
+  /// Signed in, but only the masjid's admins may do this.
+  bool get forbidden => code == 'forbidden';
+
   @override
   String toString() => message;
 }
@@ -136,8 +139,51 @@ class SnapSalatApi {
     final j = await _send('GET', '/auth/check', token: token);
     final user = (j['user'] as Map?) ?? const {};
     return Volunteer(
-        user['name'] as String?, VolunteerStatus.parse(user['status']));
+        user['name'] as String?, VolunteerStatus.parse(user['status']),
+        isAdmin: user['role'] == 'admin');
   }
+
+  /// `GET /volunteers`, admins only: everyone who has registered.
+  Future<List<VolunteerAccount>> volunteers(String token) async {
+    final j = await _send('GET', '/volunteers', token: token);
+    try {
+      return [
+        for (final v in (j['volunteers'] as List? ?? const []))
+          VolunteerAccount.fromJson((v as Map).cast())
+      ];
+    } on TypeError {
+      throw const ApiException(
+          0, 'The server sent an unexpected list of volunteers.');
+    }
+  }
+
+  /// `POST /volunteers/{id}/approve`, admins only.
+  Future<VolunteerAccount> approve(String token, int id) =>
+      _decide(token, id, 'approve');
+
+  /// `POST /volunteers/{id}/revoke`, admins only: declines a pending
+  /// volunteer, or withdraws an approved one's permission.
+  Future<VolunteerAccount> revoke(String token, int id) =>
+      _decide(token, id, 'revoke');
+
+  Future<VolunteerAccount> _decide(String token, int id, String action) async {
+    final j = await _send('POST', '/volunteers/$id/$action', token: token);
+    return VolunteerAccount.fromJson((j['volunteer'] as Map).cast());
+  }
+
+  /// `POST /push/register`: send this install's push token, so the server
+  /// can notify whoever is signed in (admins: volunteers waiting;
+  /// volunteers: when they're approved).
+  Future<void> registerPush(String token, String pushToken,
+          {String? platform}) =>
+      _send('POST', '/push/register', token: token, body: {
+        'token': pushToken,
+        if (platform != null) 'platform': platform,
+      });
+
+  /// `POST /push/unregister`: stop notifying this install.
+  Future<void> unregisterPush(String pushToken) =>
+      _send('POST', '/push/unregister', body: {'token': pushToken});
 
   /// `POST /prayer-times`.
   Future<SubmitResult> submit(String token, PrayerTimesSubmission s) async {

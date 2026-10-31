@@ -97,7 +97,7 @@ function page(title, body, { session, active } = {}) {
 <body><header class="top"><div class="brand">Snap Salat</div>${nav}</header><main>${body}</main></body></html>`;
 }
 
-export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
+export function adminRoutes({ store, dataDir, secureCookies, log, announce, push, track = (p) => p }) {
   const loginLimit = rateLimiter(10, 15 * 60_000);
 
   function session(req) {
@@ -208,7 +208,7 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
     `, { session: s, active: '/admin' });
   }
 
-  function settingsPage(s, notice, errors = {}) {
+  function settingsPage(s, notice, errors = {}, req = null) {
     const st = store.settings();
     const sunsetNow = st.maghrib_mode === 'sunset' ? sunsetMaghrib(st, localDate(Date.now(), st.timezone)) : null;
     const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
@@ -298,6 +298,25 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
             Submit each draft for approval (otherwise it stays a draft)</label>
           <div><button type="submit" name="_action" value="test">Save and test connection</button></div>
         </section>
+
+        <section class="card stack">
+          <h2>Notifications</h2>
+          <p class="muted">Push notifications to the app: admins hear when a volunteer is waiting for approval,
+            volunteers when they’re approved, and anyone who follows this masjid in the app when the times change.
+            They go through the notification relay that the Snap Salat app uses.</p>
+          <label class="check"><input type="checkbox" name="push_enabled" value="1"${checked('push_enabled')}>
+            Send push notifications</label>
+          <div class="grid2">
+            <label>Notification relay ${err('push_relay_url')}
+              <input type="text" name="push_relay_url" value="${e(st.push_relay_url)}" placeholder="https://push.example.org">
+              <span class="hint">The relay for the app your volunteers use.</span></label>
+            <label>This server’s address in the app ${err('push_api_url')}
+              <input type="text" name="push_api_url" value="${e(st.push_api_url)}"
+                placeholder="${req ? e(`${origin(req)}/snap-salat`) : 'https://yourmasjid.org/snap-salat'}">
+              <span class="hint">Exactly as in the masjid directory, or as volunteers type it. Blank: ${
+                req ? e(`${origin(req)}/snap-salat`) : 'this address'}.</span></label>
+          </div>
+        </section>
         <div><button type="submit" class="primary">Save settings</button></div>
       </form>
     `, { session: s, active: '/admin/settings' });
@@ -351,6 +370,13 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
     if (v.announce_enabled === '1' && (!announceUrl || !(token || store.settings().announce_token))) {
       errors.announce_url = errors.announce_url ?? 'Enter the address and token to turn announcements on.';
     }
+    v.push_enabled = form.push_enabled === '1' ? '1' : '0';
+    for (const k of ['push_relay_url', 'push_api_url']) {
+      const raw = String(form[k] ?? '').trim().replace(/\/+$/, '');
+      if (raw && !/^https?:\/\/[^\s/]+/.test(raw)) errors[k] = 'A web address starting with https://';
+      else v[k] = raw;
+    }
+    if (v.push_enabled === '1' && !v.push_relay_url) errors.push_relay_url = errors.push_relay_url ?? 'Enter the relay to turn notifications on.';
     return { values: v, errors };
   }
 
@@ -394,6 +420,7 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
       if (status === 'delete') store.deleteUser(user.id);
       else store.setUserStatus(user.id, status, g.session.username);
       log(`admin ${g.session.username}: ${status} ${user.username}`);
+      if (status === 'approved' && user.status !== 'approved' && push) track(push.approved(user.id));
     }
     redirect(res, '/admin');
   };
@@ -444,20 +471,22 @@ export function adminRoutes({ store, dataDir, secureCookies, log, announce }) {
       },
       'GET /admin/settings': async (req, res, url) => {
         const g = await guard(req, res);
-        if (g) sendHtml(res, 200, settingsPage(g.session, url.searchParams.get('saved') ? 'Settings saved.' : null));
+        if (g) sendHtml(res, 200, settingsPage(g.session, url.searchParams.get('saved') ? 'Settings saved.' : null, {}, req));
       },
       'POST /admin/settings': async (req, res) => {
         const g = await guard(req, res);
         if (!g) return;
         const { values, errors } = validateSettings(g.form);
         if (Object.keys(errors).length) {
-          return sendHtml(res, 422, settingsPage(g.session, 'Some settings need fixing.', errors));
+          return sendHtml(res, 422, settingsPage(g.session, 'Some settings need fixing.', errors, req));
         }
+        // The address the app uses is usually the one the admin is on.
+        if (values.push_enabled === '1' && !values.push_api_url) values.push_api_url = `${origin(req)}/snap-salat`;
         store.saveSettings(values);
         log(`admin ${g.session.username}: settings saved`);
         if (g.form._action === 'test') {
           const result = await announce.test();
-          return sendHtml(res, 200, settingsPage(g.session, `Settings saved. ${result.message}`));
+          return sendHtml(res, 200, settingsPage(g.session, `Settings saved. ${result.message}`, {}, req));
         }
         redirect(res, '/admin/settings?saved=1');
       },

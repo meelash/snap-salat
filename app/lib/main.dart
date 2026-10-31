@@ -1,9 +1,14 @@
+import 'dart:async';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_state.dart';
 import 'screens/home_screen.dart';
+import 'screens/volunteers_screen.dart';
+import 'services/push_service.dart';
 import 'theme.dart';
 
 void main() {
@@ -37,18 +42,80 @@ class AppScope extends InheritedNotifier<AppState> {
       context.getInheritedWidgetOfExactType<AppScope>()!.notifier!;
 }
 
-class SnapSalatApp extends StatelessWidget {
+class SnapSalatApp extends StatefulWidget {
   final AppState state;
   const SnapSalatApp({super.key, required this.state});
 
   @override
+  State<SnapSalatApp> createState() => _SnapSalatAppState();
+}
+
+class _SnapSalatAppState extends State<SnapSalatApp> {
+  final _navigator = GlobalKey<NavigatorState>();
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+  final _subscriptions = <StreamSubscription<RemoteMessage>>[];
+
+  @override
+  void initState() {
+    super.initState();
+    final push = widget.state.push;
+    if (push.available) {
+      _subscriptions
+        ..add(push.foreground.listen((m) => _onPush(m, opened: false)))
+        ..add(push.opened.listen((m) => _onPush(m, opened: true)));
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final s in _subscriptions) {
+      s.cancel();
+    }
+    super.dispose();
+  }
+
+  /// A notification arrived while the app is open, or was tapped.
+  void _onPush(RemoteMessage m, {required bool opened}) {
+    final state = widget.state;
+    final api = Uri.tryParse(m.data['api'] as String? ?? '');
+    final masjid = state.masjid;
+    // Only about the chosen masjid; others are just shown by the system.
+    if (api == null ||
+        masjid == null ||
+        canonicalApi(api) != canonicalApi(masjid.api)) {
+      return;
+    }
+    switch (m.data['type']) {
+      case 'times_changed':
+        state.refreshCurrent();
+      case 'approved':
+        state.refreshStatus();
+      case 'approval_waiting':
+        state.refreshPending();
+        if (opened && state.isAdmin) {
+          _navigator.currentState?.push(
+              MaterialPageRoute(builder: (_) => const VolunteersScreen()));
+        }
+    }
+    // Android doesn't show notifications while the app is open (iOS does).
+    final text = m.notification?.body;
+    if (!opened &&
+        text != null &&
+        defaultTargetPlatform == TargetPlatform.android) {
+      _messenger.currentState?.showSnackBar(SnackBar(content: Text(text)));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AppScope(
-      state: state,
+      state: widget.state,
       child: MaterialApp(
         title: 'Snap Salat',
         debugShowCheckedModeBanner: false,
         theme: Brand.theme(),
+        navigatorKey: _navigator,
+        scaffoldMessengerKey: _messenger,
         home: const HomeScreen(),
       ),
     );

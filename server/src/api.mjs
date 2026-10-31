@@ -14,16 +14,40 @@ const TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const USERNAME = /^[A-Za-z0-9_.-]{3,40}$/;
 
-export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = (p) => p }) {
+export function apiRoutes({ store, dataDir, log, limits = {}, announce, push, track = (p) => p }) {
   const loginLimit = rateLimiter(limits.loginPerMinute ?? 10, 60_000);
   const registerLimit = rateLimiter(limits.registerPerHour ?? 5, 60 * 60_000);
 
+  /**
+   * The volunteer, or admin, the bearer token belongs to. Admins (the
+   * accounts for the admin page) can sign in to the app too: they count as
+   * approved, and may also approve volunteers.
+   */
   function bearerUser(req) {
     const m = /^Bearer (.+)$/.exec(req.headers.authorization ?? '');
-    return m ? store.sessionUser(hashToken(m[1])) : null;
+    if (!m) return null;
+    const hash = hashToken(m[1]);
+    const user = store.sessionUser(hash);
+    if (user) return { ...user, role: 'volunteer' };
+    const admin = store.adminApiSession(hash);
+    return admin && { id: null, adminId: admin.id, username: admin.username, name: admin.username, status: 'approved', role: 'admin' };
   }
 
-  const userJson = (u) => ({ name: u.name, username: u.username, status: u.status });
+  const userJson = (u) => ({ name: u.name, username: u.username, status: u.status, role: u.role });
+  const volunteerJson = (u) => ({
+    id: u.id, username: u.username, name: u.name, contact: u.contact, note: u.note,
+    status: u.status, registered_at: u.created_at,
+  });
+
+  /** The signed-in admin, or null after answering 401/403. */
+  function requireAdmin(req, res) {
+    const user = bearerUser(req);
+    if (!user) return fail(res, 401, 'unauthorized', 'Please sign in again.'), null;
+    if (user.role !== 'admin') return fail(res, 403, 'forbidden', 'Only the masjid’s admins can do this.'), null;
+    return user;
+  }
+
+  const background = (p) => track(p.catch((err) => log(`push error: ${err.message ?? err}`)));
 
   function validateSubmission(body, settings) {
     const errors = {};
@@ -87,7 +111,19 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
     return { file, sha };
   }
 
-  return {
+  const setStatus = (status) => async (req, res, url, params) => {
+    const admin = requireAdmin(req, res);
+    if (!admin) return;
+    const user = store.userById(Number(params.id));
+    if (!user) return fail(res, 404, 'not_found', 'That volunteer no longer exists.');
+    const was = user.status;
+    store.setUserStatus(user.id, status, admin.username);
+    log(`admin ${admin.username} (app): ${status} ${user.username}`);
+    if (status === 'approved' && was !== 'approved' && push) background(push.approved(user.id));
+    sendJson(res, 200, { volunteer: volunteerJson(store.userById(user.id)) });
+  };
+
+  const routes = {
     'GET /info': (req, res) => {
       const s = store.settings();
       sendJson(res, 200, {
@@ -97,6 +133,7 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
         auth: { methods: ['password'], register: s.allow_registration === '1' },
         accepts: { prayers: IQAMAH_KEYS, adhan: true, image: s.accept_image === '1' },
         max_age_minutes: parseInt(s.max_age_minutes, 10) || 1440,
+        ...(push?.info() ? { push: push.info() } : {}),
       });
     },
 
@@ -114,7 +151,10 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
       if (password.length < 8) fields.password = 'at least 8 characters';
       if (!name || name.length > 80) fields.name = 'your name, up to 80 characters';
       if (Object.keys(fields).length) return fail(res, 422, 'invalid', 'Please check the highlighted fields.', { fields });
-      if (store.userByName(username)) return fail(res, 409, 'username_taken', 'That username is already taken.');
+      // Admins sign in to the app with the same form, so their names are taken too.
+      if (store.userByName(username) || store.adminByName(username)) {
+        return fail(res, 409, 'username_taken', 'That username is already taken.');
+      }
       store.createUser({
         username,
         name,
@@ -123,6 +163,7 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
         passwordHash: await hashPassword(password),
       });
       log(`new volunteer registration: ${username} (${name})`);
+      if (push) background(push.approvalWaiting());
       sendJson(res, 201, {
         status: 'pending',
         message: 'Thank you! The masjid will review your request. You can sign in now and check back.',
@@ -132,12 +173,25 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
     'POST /auth/login': async (req, res) => {
       if (!loginLimit(clientIp(req))) return fail(res, 429, 'rate_limited', 'Too many attempts. Wait a minute.');
       const body = await readJson(req);
-      const user = store.userByName(String(body.username ?? '').trim());
-      const ok = user ? await checkPassword(String(body.password ?? ''), user.password_hash) : false;
-      if (!ok) return fail(res, 401, 'invalid_credentials', 'Wrong username or password.');
+      const username = String(body.username ?? '').trim();
+      const password = String(body.password ?? '');
       const { token, hash } = newToken();
-      store.addSession(hash, user.id, Date.now() + TOKEN_TTL_SECONDS * 1000);
-      sendJson(res, 200, { access_token: token, token_type: 'Bearer', expires_in: TOKEN_TTL_SECONDS, user: userJson(user) });
+      const expires = Date.now() + TOKEN_TTL_SECONDS * 1000;
+      const reply = (user) => sendJson(res, 200, {
+        access_token: token, token_type: 'Bearer', expires_in: TOKEN_TTL_SECONDS, user: userJson(user),
+      });
+      const admin = store.adminByName(username);
+      if (admin && await checkPassword(password, admin.password_hash)) {
+        store.addAdminApiSession(hash, admin.id, expires);
+        log(`admin sign-in (app): ${admin.username}`);
+        return reply({ name: admin.username, username: admin.username, status: 'approved', role: 'admin' });
+      }
+      const user = store.userByName(username);
+      if (!user || !(await checkPassword(password, user.password_hash))) {
+        return fail(res, 401, 'invalid_credentials', 'Wrong username or password.');
+      }
+      store.addSession(hash, user.id, expires);
+      reply({ ...user, role: 'volunteer' });
     },
 
     'GET /auth/check': (req, res) => {
@@ -166,6 +220,7 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
         return fail(res, 422, 'invalid', explain(errors, body, settings), { fields: errors });
       }
       const current = store.current();
+      const publishedBefore = JSON.stringify(publishedTimes(store).iqamah);
       if (current?.captured_at_ms != null && current.captured_at_ms >= captured) {
         return fail(res, 409, 'stale', `Times from a newer photo (taken ${current.captured_at}) are already saved.`);
       }
@@ -201,9 +256,45 @@ export function apiRoutes({ store, dataDir, log, limits = {}, announce, track = 
           merged: store.current().iqamah,
         }).catch((err) => log(`announcement error: ${err.message ?? err}`)));
       }
+      if (push && JSON.stringify(publishedTimes(store).iqamah) !== publishedBefore) background(push.timesChanged());
       sendJson(res, 201, { status: 'accepted', message: 'Prayer times updated. JazakAllahu khairan!' });
     },
+
+    // --- admins, in the app
+    'GET /volunteers': (req, res) => {
+      if (!requireAdmin(req, res)) return;
+      sendJson(res, 200, { volunteers: store.users().map(volunteerJson) });
+    },
+
+    // --- push notifications: this install's token, for whoever is signed in
+    'POST /push/register': async (req, res) => {
+      const user = bearerUser(req);
+      if (!user) return fail(res, 401, 'unauthorized', 'Please sign in again.');
+      const body = await readJson(req);
+      const token = String(body.token ?? '');
+      if (!/^[A-Za-z0-9:_\-]{20,4096}$/.test(token)) return fail(res, 422, 'invalid', 'Not a push token.', { fields: { token: 'invalid' } });
+      store.addPushDevice(token, {
+        userId: user.id,
+        adminId: user.adminId ?? null,
+        platform: ['android', 'ios'].includes(body.platform) ? body.platform : null,
+      });
+      sendJson(res, 200, { status: 'registered' });
+    },
+    'POST /push/unregister': async (req, res) => {
+      const body = await readJson(req);
+      // No sign-in needed: the token itself is the secret, and signing out
+      // should stop notifications even when the session has already expired.
+      store.removePushDevices([String(body.token ?? '')]);
+      sendJson(res, 200, { status: 'unregistered' });
+    },
   };
+
+  const patterns = [
+    [/^POST \/volunteers\/(?<id>\d+)\/approve$/, setStatus('approved')],
+    [/^POST \/volunteers\/(?<id>\d+)\/revoke$/, setStatus('revoked')],
+  ];
+
+  return { routes, patterns };
 }
 
 export { HttpError };

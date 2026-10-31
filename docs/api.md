@@ -27,7 +27,10 @@ check every time before sending. Your server receives plain, validated JSON.
 | `POST` | `/auth/login` | none | Exchange a username and password for a token. **Required.** |
 | `GET` | `/auth/check` | Bearer | Is the token valid, and is this volunteer **approved** yet? **Required.** |
 | `POST` | `/prayer-times` | Bearer | Receive new times from a photo. Approved volunteers only. **Required.** |
-| `GET` | `/prayer-times` | none | Return the times you have now. Optional. |
+| `GET` | `/prayer-times` | none | Return the times you have now. Optional, but the app shows them so volunteers can see what needs updating. |
+| `GET` | `/volunteers` | Bearer (admin) | List volunteers, so admins can approve them in the app. Optional. |
+| `POST` | `/volunteers/{id}/approve`, `/volunteers/{id}/revoke` | Bearer (admin) | Approve, decline or revoke a volunteer. Optional. |
+| `POST` | `/push/register`, `/push/unregister` | Bearer / none | Push notifications. Optional. |
 
 Paths are relative to a **base URL** of your choice, for example
 `https://yourmasjid.org/snap-salat`. Users type that base URL into the app,
@@ -62,7 +65,8 @@ the masjid's name, and pick a sign-in form.
     "adhan": true,
     "image": false
   },
-  "max_age_minutes": 1440
+  "max_age_minutes": 1440,
+  "push": { "relay": "https://snap-salat-relay.example.workers.dev" }
 }
 ```
 
@@ -78,6 +82,7 @@ the masjid's name, and pick a sign-in form.
 | `accepts.adhan` | no | Whether you want adhan (start) times as well as iqamah. Default `true`. |
 | `accepts.image` | no | Set `true` if you want the photo itself uploaded. Default `false`. |
 | `max_age_minutes` | no | Tell users how old a photo you accept. |
+| `push.relay` | no | Only if you send [push notifications](#push-notifications-optional): the relay you send them through. The app offers notifications only when it's the relay the app was built for. |
 
 ## Volunteers: register, get approved, update
 
@@ -138,7 +143,7 @@ their status:
   "access_token": "4f9c…",
   "token_type": "Bearer",
   "expires_in": 2592000,
-  "user": { "name": "Yusuf Ahmed", "status": "pending" }
+  "user": { "name": "Yusuf Ahmed", "status": "pending", "role": "volunteer" }
 }
 ```
 
@@ -161,8 +166,12 @@ Header: `Authorization: Bearer <token>`. Answer `200` with the volunteer's
 current status:
 
 ```json
-{ "user": { "name": "Yusuf Ahmed", "username": "yusuf", "status": "approved" } }
+{ "user": { "name": "Yusuf Ahmed", "username": "yusuf", "status": "approved", "role": "volunteer" } }
 ```
+
+`role` is optional: `"admin"` for someone who may also approve volunteers
+in the app (see [Admins in the app](#admins-in-the-app-optional)), otherwise
+`"volunteer"`, which is also what a missing `role` means.
 
 | `status` | Meaning |
 |---|---|
@@ -291,7 +300,105 @@ No authentication required. It returns what you have now, in the same shape:
 }
 ```
 
-Answer `404` if you don't offer it.
+Answer `404` if you don't offer it. The app shows these times on its home
+screen, and next to each time it reads ("Website now 6:15 AM"), so a
+volunteer can see at a glance whether the website needs updating.
+
+Optionally, add `"maghrib": {"source": "sunset"}` when Maghrib is calculated
+from sunset rather than taken from the board. The app then doesn't compare
+the board's Maghrib with it.
+
+## Admins in the app (optional)
+
+Whoever approves volunteers can do it from the app too. They sign in with
+the same form as volunteers, at `POST /auth/login`, and you answer with
+`"role": "admin"` and `"status": "approved"`. The example server lets the
+accounts for its admin page sign in this way. The app then shows a
+**Volunteers** screen. Admins can also send times.
+
+### `GET /volunteers`
+
+Header: `Authorization: Bearer <admin token>`. Everyone who has registered:
+
+```json
+{
+  "volunteers": [
+    {
+      "id": 7,
+      "username": "yusuf",
+      "name": "Yusuf Ahmed",
+      "contact": "555-0134",
+      "note": "I help with the Friday setup",
+      "status": "pending",
+      "registered_at": "2026-10-09T20:55:03Z"
+    }
+  ]
+}
+```
+
+### `POST /volunteers/{id}/approve` and `POST /volunteers/{id}/revoke`
+
+No body. `approve` lets the volunteer send times. `revoke` declines a
+pending volunteer, or withdraws an approved one's permission (and should end
+their sessions). Both answer `200` with `{"volunteer": {…}}` as above.
+
+| Status | When |
+|---|---|
+| `401` | Token missing, wrong or expired |
+| `403` | `{"error": "forbidden", …}`: signed in, but not as an admin |
+| `404` | No volunteer with that id |
+
+## Push notifications (optional)
+
+The app can show notifications:
+
+- **to admins** when a volunteer registers and is waiting for approval;
+- **to a pending volunteer** when they're approved;
+- **to anyone who follows the masjid** in the app ("Notify me when these
+  times change") when the published iqamah times change.
+
+They're sent with Firebase Cloud Messaging, which is free. But only someone
+holding the app's Firebase key can send them, and that can't be every masjid
+server, because then any of them could notify every user of the app. So
+servers call a small **relay**, which holds the key and sends the
+notifications. Its code and setup are in
+[`relay/`](https://github.com/meelash/snap-salat/tree/main/relay).
+
+1. Advertise the relay in `GET /info` as `"push": {"relay": "<address>"}`.
+2. Accept the app's push token from whoever is signed in:
+
+   ```http
+   POST /push/register
+   Authorization: Bearer <token>
+
+   {"token": "<FCM registration token>", "platform": "android"}
+   ```
+
+   Answer `200`. Keep the token with the account: admins' tokens get
+   `approval_waiting`, volunteers' tokens get `approved`. `POST
+   /push/unregister` with `{"token": …}` (no sign-in needed) forgets it; the
+   app calls it when someone signs out.
+3. Tell the relay when something happens:
+
+   ```http
+   POST {relay}/v1/notify
+
+   {"event": "approval_waiting", "api": "https://yourmasjid.org/snap-salat",
+    "masjid": "Masjid Al-Noor", "tokens": ["…"], "count": 2}
+   {"event": "approved", "api": "…", "masjid": "…", "tokens": ["…"]}
+   {"event": "times_changed", "api": "https://yourmasjid.org/snap-salat"}
+   ```
+
+   Send at most 40 tokens per request. The relay answers
+   `{"sent": 1, "invalid_tokens": ["…"]}`; forget the invalid ones, because
+   those apps were uninstalled. For `times_changed`, the relay reads your
+   `GET /prayer-times` itself and notifies everyone following `api`, but
+   only if an iqamah time really changed since it last looked. So `api` must
+   be your base URL exactly as the app knows it, from the directory or as
+   volunteers type it.
+
+None of this blocks a volunteer's request. The example server does it in the
+background, and turns it on under **Settings → Notifications**.
 
 ## Trying it locally
 

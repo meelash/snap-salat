@@ -6,6 +6,7 @@ import { apiRoutes } from './api.mjs';
 import { publicRoutes } from './public.mjs';
 import { adminRoutes } from './admin.mjs';
 import { announcer } from './announce.mjs';
+import { pusher } from './push.mjs';
 import { HttpError, fail, sendHtml, redirect, escapeHtml } from './util.mjs';
 
 export const API_BASE = '/snap-salat';
@@ -19,9 +20,10 @@ export function createApp({ store, dataDir, secureCookies = true, log = () => {}
     return p;
   };
   const announce = announcer({ store, log, fetchImpl });
-  const api = apiRoutes({ store, dataDir, log, limits, announce, track });
+  const push = pusher({ store, log, fetchImpl });
+  const api = apiRoutes({ store, dataDir, log, limits, announce, push, track });
   const pub = publicRoutes({ store });
-  const admin = adminRoutes({ store, dataDir, secureCookies, log, announce });
+  const admin = adminRoutes({ store, dataDir, secureCookies, log, announce, push, track });
 
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
@@ -32,13 +34,17 @@ export function createApp({ store, dataDir, secureCookies = true, log = () => {}
 
     if (path === API_BASE || path.startsWith(`${API_BASE}/`)) {
       const sub = path.slice(API_BASE.length) || '/';
-      const handler = api[`${method} ${sub}`];
+      const handler = api.routes[`${method} ${sub}`];
       if (req.method === 'OPTIONS' && sub === '/prayer-times') {
         res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET' });
         return res.end();
       }
-      if (!handler) return fail(res, 404, 'not_found', 'Not found');
-      return handler(req, res, url);
+      if (handler) return handler(req, res, url);
+      for (const [pattern, h] of api.patterns) {
+        const m = pattern.exec(`${method} ${sub}`);
+        if (m) return h(req, res, url, m.groups);
+      }
+      return fail(res, 404, 'not_found', 'Not found');
     }
     if (pub[key]) return pub[key](req, res, url);
     if (admin.exact[key]) return admin.exact[key](req, res, url);

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 108 108">
+  <!-- Snap Salat: a camera lens holding a crescent. Full icon (iOS, legacy Android). -->
+  <defs>
+    <mask id="crescent">
+      <circle cx="51" cy="56" r="12" fill="#fff"/>
+      <circle cx="56.5" cy="52.5" r="10.5" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="108" height="108" fill="#0E2A21"/>
+  <circle cx="54" cy="56" r="26" fill="none" stroke="#D4AF5F" stroke-width="5"/>
+  <circle cx="54" cy="56" r="19" fill="#163A2E"/>
+  <circle cx="51" cy="56" r="12" fill="#F1ECDF" mask="url(#crescent)"/>
+  <rect x="66" y="22" width="14" height="6" rx="3" fill="#D4AF5F"/>
+</svg>

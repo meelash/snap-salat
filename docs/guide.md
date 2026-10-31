@@ -22,11 +22,23 @@ The app works on **Android** and **iPhone**.
    are.
 3. **Wait for approval.** Someone at the masjid approves new volunteers. Until
    then, the home screen shows *Waiting for the masjid to approve you*. Tap
-   **Check again** to see if you've been approved.
+   **Check again** to see if you've been approved. If the masjid has
+   notifications on, the app tells you as soon as they approve you.
 
 Already have an account? Just sign in.
 
+**Approving volunteers.** If you run the masjid's admin page, sign in to the
+app with that username and password. A **Volunteers** button appears on the
+home screen, with the number of people waiting. Approve or decline them
+there, or revoke someone later. With notifications on, you hear as soon as
+someone registers.
+
 ## Updating the times
+
+The home screen shows **what the masjid's website has now**, and when the
+photo behind those times was taken. If they match the board, there's
+nothing to do. If the masjid has notifications on, you can also turn on
+**Notify me when these times change**. You don't need an account for that.
 
 1. **Take the photo.** Tap **Take photo** and photograph the prayer-time board.
    You can also choose one you took earlier.
@@ -36,7 +48,9 @@ Already have an account? Just sign in.
      closely at that one;
    - a red tile means it couldn't read that clock, so tap it and enter the time;
    - tap any tile to change its time, and hold it to clear a time that isn't on
-     the board.
+     the board;
+   - under each time, *Website now 6:15 AM* means the photo changes that
+     time, and *Same as the website* means it doesn't.
 3. **Send.** Tap **Send to *your masjid***, confirm, and you're done.
 
 The time the photo was taken comes from the camera and **can't be changed**.

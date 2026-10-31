@@ -61,6 +61,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
   void initState() {
     super.initState();
     _capture = captureInfoFor(widget.photo);
+    // What the website has now, to show what this photo changes.
+    final state = AppScope.read(context);
+    if (state.current == null) state.refreshCurrent();
     final given = widget.initialResult;
     if (given != null) {
       _result = given;
@@ -204,6 +207,17 @@ class _ReviewScreenState extends State<ReviewScreen> {
     }
 
     final ageHours = _capture.age.inMinutes / 60;
+    final website = state.current;
+    String was(String key, String value) {
+      final now = website?.iqamah[key];
+      if (now == null || now == value) return '';
+      if (key == 'maghrib' && website!.maghribFromSunset) return '';
+      return ' (was ${Hm.tryParse(now)?.to12h() ?? now})';
+    }
+
+    final unchanged = website != null &&
+        !website.isEmpty &&
+        iqamah.entries.every((e) => website.iqamah[e.key] == e.value);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -214,7 +228,14 @@ class _ReviewScreenState extends State<ReviewScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final e in iqamah.entries)
-                Text('${_name(e.key)}: ${Hm.tryParse(e.value)!.to12h()}'),
+                Text('${_name(e.key)}: ${Hm.tryParse(e.value)!.to12h()}'
+                    '${was(e.key, e.value)}'),
+              if (unchanged)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('These are the times the website already has. '
+                      'Sending them confirms they’re still right.'),
+                ),
               if (adhan.isNotEmpty) Text('+ ${adhan.length} adhan times'),
               const SizedBox(height: 12),
               Text('Photo taken ${_formatCapture(_capture)}'),
@@ -288,6 +309,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         if (ok != true) return;
         sent = await state.api!.submit(state.session!.accessToken, submission);
       }
+      state.refreshCurrent();
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -478,7 +500,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         _tiles([
           for (final p in _iqamahPrayers)
             (p, _iqamah.putIfAbsent(p, () => _Entry(null, 1))),
-        ]),
+        ], website: AppScope.of(context).current),
         if (_adhan.isNotEmpty) ...[
           const _Header('ADHAN', hint: 'Start times shown on the display'),
           _tiles([
@@ -583,17 +605,19 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   /// Prayer tiles, two per row, numbered like the pins on the photo.
-  Widget _tiles(List<(Prayer, _Entry)> items) {
+  ///
+  /// With [website], each iqamah tile also says what the website has now.
+  Widget _tiles(List<(Prayer, _Entry)> items, {CurrentTimes? website}) {
     final rows = <Widget>[];
     for (var i = 0; i < items.length; i += 2) {
       rows.add(Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: _tile(items[i].$1, items[i].$2)),
+          Expanded(child: _tile(items[i].$1, items[i].$2, website)),
           const SizedBox(width: 10),
           Expanded(
               child: i + 1 < items.length
-                  ? _tile(items[i + 1].$1, items[i + 1].$2)
+                  ? _tile(items[i + 1].$1, items[i + 1].$2, website)
                   : const SizedBox()),
         ],
       ));
@@ -605,8 +629,27 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _tile(Prayer p, _Entry e) {
+  /// What the website has for [p] compared with this reading, if known:
+  /// (text, changed?).
+  static (String, bool)? _websiteNote(
+      Prayer p, _Entry e, CurrentTimes? website) {
+    if (website == null || website.isEmpty) return null;
+    if (p == Prayer.maghrib && website.maghribFromSunset) {
+      return ('Website uses sunset', false);
+    }
+    final now = Hm.tryParse(website.iqamah[p.name] ?? '');
+    if (now == null) {
+      return e.time == null ? null : ('New on the website', true);
+    }
+    if (e.time == null) return ('Website: ${now.to12h()}', false);
+    return e.time == now
+        ? ('Same as the website', false)
+        : ('Website now ${now.to12h()}', true);
+  }
+
+  Widget _tile(Prayer p, _Entry e, [CurrentTimes? website]) {
     final unsure = e.time != null && e.confidence < 0.8 && !e.edited;
+    final note = _websiteNote(p, e, website);
     final accent =
         e.missing ? Brand.error : (unsure ? Brand.check : Brand.brass);
     final number = prayerNumber(p);
@@ -614,7 +657,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
     return Semantics(
       button: true,
       label: '${p.displayName}, ${time?.to12h() ?? 'not set'}'
-          '${unsure ? ', please check' : ''}',
+          '${unsure ? ', please check' : ''}'
+          '${note != null ? ', ${note.$1}' : ''}',
       child: Material(
         color: unsure || e.missing ? Brand.checkSurface : Brand.surface,
         shape: RoundedRectangleBorder(
@@ -695,6 +739,14 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     const SizedBox(height: 4),
                     const Text('Couldn’t read this clock',
                         style: TextStyle(fontSize: 13, color: Brand.error)),
+                  ],
+                  if (note != null) ...[
+                    const SizedBox(height: 4),
+                    Text(note.$1,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: note.$2 ? Brand.brass : Brand.muted,
+                            fontWeight: note.$2 ? FontWeight.w700 : null)),
                   ],
                 ],
               ),
